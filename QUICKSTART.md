@@ -8,20 +8,67 @@ Difficult AI is a deliberately challenging conversational agent that simulates h
 - Staying on topic under pressure
 - Making and honoring commitments
 
-## Getting Started
+## Quick Start Options
 
-### 1. Install Dependencies
+### Option 1: Voice-to-Voice Agent (Production)
+
+For real-time voice training with LiveKit:
+
+#### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Set Up API Key
+#### 2. Set Up Environment
+```bash
+cp .env.example .env
+# Edit .env with your credentials:
+# - OPENAI_API_KEY (required)
+# - LIVEKIT_URL (required, e.g., wss://your-project.livekit.cloud)
+# - LIVEKIT_API_KEY (required)
+# - LIVEKIT_API_SECRET (required)
+# - DEFAULT_VOICE (optional, default: marin)
+```
+
+#### 3. Run the Voice Agent
+```bash
+python apps/livekit_agent/agent.py dev
+```
+
+The agent will:
+- Connect to your LiveKit server
+- Wait for voice connections
+- Conduct high-pressure training conversations
+- Generate performance scorecards
+
+**Get LiveKit Credentials:**
+- Sign up at https://cloud.livekit.io (free tier available)
+- Create a project and get your URL, API key, and secret
+
+**Connect a Client:**
+- Use LiveKit web SDK or mobile app
+- Join a room with optional scenario metadata
+- Have your voice conversation
+- Receive detailed scorecard at the end
+
+See [apps/livekit_agent/README.md](apps/livekit_agent/README.md) for full documentation.
+
+### Option 2: Interactive Text Mode (Development)
+
+For quick text-based testing:
+
+#### 1. Install Dependencies
+```bash
+pip install openai python-dotenv
+```
+
+#### 2. Set Up API Key
 ```bash
 cp .env.example .env
 # Edit .env and add your OpenAI API key
 ```
 
-### 3. Run Interactive Mode
+#### 3. Run Interactive Mode
 ```bash
 python difficult_ai.py
 ```
