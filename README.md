@@ -98,35 +98,107 @@ git clone https://github.com/wildhash/difficultai.git
 cd difficultai
 ```
 
-2. Install dependencies:
+2. Install dependencies (one command):
+```bash
+make install
+```
+
+Or manually:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Set up your OpenAI API key:
+3. Set up environment variables:
 ```bash
 cp .env.example .env
-# Edit .env and add your OpenAI API key
+# Edit .env with your credentials (see below)
 ```
+
+## Quick Start (One Command)
+
+```bash
+make dev
+```
+
+This starts the LiveKit agent in development mode. Make sure you have:
+- Configured `.env` with LiveKit and OpenAI credentials
+- Installed dependencies with `make install`
 
 ## Usage
 
-### Voice-to-Voice LiveKit Agent (Production)
+### Voice-to-Voice LiveKit Agent (Production Ready)
 
 **One-command start:**
 
 ```bash
-# Using Makefile (recommended)
 make dev
+```
 
-# Or using Python module
+Or alternatively:
+```bash
+# Using Python module
 python -m apps.livekit_agent dev
 
 # Or directly
 python apps/livekit_agent/agent.py dev
 ```
 
-**Smoke test (verify setup):**
+#### Quick Start with LiveKit Cloud (Recommended for Testing)
+
+1. **Get LiveKit Cloud credentials** (Free tier available):
+   - Sign up at [https://cloud.livekit.io](https://cloud.livekit.io)
+   - Create a new project
+   - Get your credentials from Project Settings:
+     - `LIVEKIT_URL` (format: `wss://your-project.livekit.cloud`)
+     - `LIVEKIT_API_KEY` (starts with `API`)
+     - `LIVEKIT_API_SECRET`
+
+2. **Get OpenAI API key**:
+   - Go to [https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+   - Create a new API key
+   - Ensure you have access to the Realtime API (or the agent will automatically fallback to STT->LLM->TTS)
+
+3. **Configure `.env`**:
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Edit `.env` with your credentials:
+   ```bash
+   OPENAI_API_KEY=sk-...
+   LIVEKIT_URL=wss://your-project.livekit.cloud
+   LIVEKIT_API_KEY=APIxxxxx
+   LIVEKIT_API_SECRET=xxxxx
+   DEFAULT_VOICE=marin
+   ```
+
+4. **Run the agent**:
+   ```bash
+   make dev
+   ```
+
+5. **Test using LiveKit Agents Playground**:
+   - Go to [LiveKit Cloud Agents Playground](https://cloud.livekit.io/agents)
+   - Open the web client: `apps/web/index.html` in your browser
+   - Fill in scenario details and click "Copy Scenario JSON"
+   - Paste the JSON in the Playground's room metadata field
+   - Click "Start Session" in the Playground
+   - Start speaking - the agent will respond with voice
+   - The agent will:
+     - Ask 3-6 questions based on the scenario and difficulty
+     - Support barge-in (interrupt anytime)
+     - Generate a scorecard at the end with 6 scores (1-10) and 3 coaching points
+
+#### Testing with Custom Web Client
+
+1. Open `apps/web/index.html` in your browser
+2. Fill in the scenario configuration
+3. Click "Copy Scenario JSON"
+4. Use the JSON with LiveKit Agents Playground or your own backend
+
+See [apps/web/README.md](apps/web/README.md) for detailed web client instructions.
+
+#### Smoke Test (Verify Setup)
 
 ```bash
 make smoke-test
@@ -139,47 +211,42 @@ The smoke test verifies:
 - ✓ LiveKit server is accessible
 - ✓ Agent components are functional
 
-#### Quick Start with LiveKit
+#### Architecture: Voice-to-Voice with Realtime API + Fallback
 
-1. **Get LiveKit credentials**:
-   - Sign up at https://cloud.livekit.io (free tier available)
-   - Get your LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET
+DifficultAI prioritizes **OpenAI's Realtime API** for native voice-to-voice conversation:
 
-2. **Configure `.env`**:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your credentials:
-   # OPENAI_API_KEY=sk-...
-   # LIVEKIT_URL=wss://your-project.livekit.cloud
-   # LIVEKIT_API_KEY=APIxxxxx
-   # LIVEKIT_API_SECRET=xxxxx
-   # DEFAULT_VOICE=marin
-   ```
-
-3. **Run the agent**:
-   ```bash
-   make dev
-   ```
-
-4. **Connect a client**:
-   - Use LiveKit web client or SDK to join a room
-   - Agent will ask for scenario details or read from room metadata
-   - Have your training conversation
-   - Receive scorecard at the end
-
-#### Architecture: Voice-to-Voice with Realtime API
-
-DifficultAI uses **OpenAI's Realtime API** for native voice-to-voice conversation:
-
-- ✓ **NOT** an STT→LLM→TTS pipeline
+**Primary Mode (Realtime API):**
+- ✓ Native voice-to-voice (no STT→LLM→TTS pipeline)
 - ✓ Lower latency (no transcription overhead)
 - ✓ Natural prosody and timing
 - ✓ Built-in barge-in support (interruption handling)
 
-**Interruption Handling:**
-- On user speech start → automatically cancels current TTS
-- On user speech start → automatically stops current generation
-- Creates "feels alive" responsive conversation
+**Automatic Fallback (if Realtime unavailable):**
+- ✓ STT: Deepgram or OpenAI Whisper
+- ✓ LLM: OpenAI GPT-4
+- ✓ TTS: OpenAI TTS
+- ✓ Same barge-in support maintained
+
+**Key Features:**
+- **Barge-in Support**: Interrupt the agent anytime while it's speaking
+- **Question Plan**: Agent generates 3-6 questions based on scenario and difficulty
+- **Scorecard**: End-of-session evaluation with 6 scores (1-10) + 3 coaching points
+
+**Scorecard Format:**
+```
+SCORES (1-10 scale):
+  Clarity:        8.5/10
+  Confidence:     7.2/10
+  Commitment:     6.8/10
+  Adaptability:   7.5/10
+  Composure:      8.1/10
+  Effectiveness:  7.6/10
+
+COACHING POINTS:
+  1. Focus on specificity: Replace vague language with concrete numbers...
+  2. Address questions directly: Avoid deflecting or changing topics...
+  3. Make concrete commitments: Include specific timelines...
+```
 
 #### Scenario Configuration
 

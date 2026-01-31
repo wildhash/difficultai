@@ -165,31 +165,31 @@ class TestEvaluatorOutput(unittest.TestCase):
         self.assertIn('metrics', evaluation)
         self.assertIn('scenario', evaluation)
         
-        # Check scores structure
+        # Check scores structure - 6 scores in 1-10 scale
         scores = evaluation['scores']
         self.assertIn('clarity', scores)
         self.assertIn('confidence', scores)
         self.assertIn('commitment', scores)
         self.assertIn('adaptability', scores)
-        self.assertIn('overall', scores)
+        self.assertIn('composure', scores)
+        self.assertIn('effectiveness', scores)
         
-        # Check all scores are 0-100
+        # Check all scores are 1-10
         for key, value in scores.items():
-            self.assertGreaterEqual(value, 0.0, f"{key} score should be >= 0")
-            self.assertLessEqual(value, 100.0, f"{key} score should be <= 100")
+            self.assertGreaterEqual(value, 1.0, f"{key} score should be >= 1")
+            self.assertLessEqual(value, 10.0, f"{key} score should be <= 10")
         
-        # Check feedback structure
+        # Check feedback structure - coaching_points and key_moments
         feedback = evaluation['feedback']
-        self.assertIn('strengths', feedback)
-        self.assertIn('weaknesses', feedback)
-        self.assertIn('recommendations', feedback)
+        self.assertIn('coaching_points', feedback)
         self.assertIn('key_moments', feedback)
         
         # Check all are lists
-        self.assertIsInstance(feedback['strengths'], list)
-        self.assertIsInstance(feedback['weaknesses'], list)
-        self.assertIsInstance(feedback['recommendations'], list)
+        self.assertIsInstance(feedback['coaching_points'], list)
         self.assertIsInstance(feedback['key_moments'], list)
+        
+        # Check exactly 3 coaching points
+        self.assertEqual(len(feedback['coaching_points']), 3, "Should have exactly 3 coaching points")
     
     def test_evaluator_summary_report(self):
         """Test that evaluator generates summary report."""
@@ -213,13 +213,21 @@ class TestEvaluatorOutput(unittest.TestCase):
         report = self.evaluator.get_summary_report(evaluation)
         
         # Check report contains expected sections
-        self.assertIn('PERFORMANCE EVALUATION', report)
-        self.assertIn('Overall Score', report)
-        self.assertIn('DIMENSION SCORES', report)
+        self.assertIn('PERFORMANCE SCORECARD', report)
+        self.assertIn('SCORES (1-10 scale)', report)
         self.assertIn('Clarity', report)
         self.assertIn('Confidence', report)
         self.assertIn('Commitment', report)
         self.assertIn('Adaptability', report)
+        self.assertIn('Composure', report)
+        self.assertIn('Effectiveness', report)
+        self.assertIn('COACHING POINTS', report)
+        self.assertIn('KEY MOMENTS', report)
+        
+        # Check that report has numbered coaching points (1., 2., 3.)
+        self.assertIn('1.', report)
+        self.assertIn('2.', report)
+        self.assertIn('3.', report)
         
         # Check report is not empty
         self.assertGreater(len(report), 100)

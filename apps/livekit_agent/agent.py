@@ -2,19 +2,23 @@
 DifficultAI LiveKit Voice Agent
 
 Production-ready LiveKit agent using OpenAI Realtime API for voice-to-voice
-high-pressure conversation training.
+high-pressure conversation training with automatic fallback to STT->LLM->TTS.
 
 VOICE-TO-VOICE ARCHITECTURE:
-This agent uses OpenAI's Realtime API for native voice-to-voice conversation.
-This is NOT an STT→LLM→TTS pipeline. The Realtime model handles:
+This agent prioritizes OpenAI's Realtime API for native voice-to-voice conversation.
+When Realtime API is available:
 - Voice input (no separate STT)
 - Natural language understanding
 - Voice output (no separate TTS)
-
-This architecture provides:
 - Lower latency (no transcription overhead)
 - More natural prosody and timing
-- Built-in barge-in support (interruption handling)
+- Built-in barge-in support
+
+FALLBACK ARCHITECTURE:
+If Realtime API is unavailable or encounters errors, automatically falls back to:
+- STT: Deepgram or OpenAI Whisper for speech-to-text
+- LLM: OpenAI GPT-4 for language understanding
+- TTS: OpenAI TTS for text-to-speech
 
 INTERRUPTION HANDLING (Barge-in):
 The agent implements explicit cancellation semantics:
@@ -68,6 +72,8 @@ class SessionState:
         self.collecting_metadata = False
         self.current_question_field: Optional[str] = None
         self.session_started = False
+        self.question_plan: list = []  # Generated question plan (3-6 questions)
+        self.questions_asked = 0  # Track questions asked
         
     def add_transcript_entry(self, role: str, text: str):
         """Add entry to transcript."""
@@ -98,7 +104,7 @@ class DifficultAIAgent:
         self.default_voice = os.getenv("DEFAULT_VOICE", "marin")
         
     async def entrypoint(self):
-        """Main agent entrypoint."""
+        """Main agent entrypoint with Realtime API and STT->LLM->TTS fallback."""
         logger.info("DifficultAI agent starting...")
         
         # Parse job metadata for scenario configuration
@@ -112,27 +118,15 @@ class DifficultAIAgent:
         participant = await self.ctx.wait_for_participant()
         logger.info(f"Participant joined: {participant.identity}")
         
-        # Set up OpenAI Realtime model
-        voice = self.session.scenario.get('voice', self.default_voice)
-        model = openai.realtime.RealtimeModel(
-            voice=voice,
-            temperature=0.8,
-            instructions=self._build_system_instructions(),
-        )
-        
-        # Create assistant with barge-in/interruption handling
-        # The VoiceAssistant automatically handles interruptions:
-        # - On user speech start → cancels current TTS
-        # - On user speech start → stops current generation
-        # This provides natural conversation flow with "feels alive" responsiveness
-        assistant = agents.VoiceAssistant(
-            vad=agents.silero.VAD.load(),
-            stt=openai.realtime.RealtimeSTT(),
-            llm=model,
-            tts=openai.realtime.RealtimeTTS(),
-            # Interruption handling is built into VoiceAssistant
-            # When user starts speaking, current speech is automatically cancelled
-        )
+        # Try to use OpenAI Realtime API, fallback to STT->LLM->TTS if unavailable
+        try:
+            logger.info("Attempting to use OpenAI Realtime API...")
+            assistant = await self._create_realtime_assistant()
+            logger.info("✓ Using OpenAI Realtime API (voice-to-voice)")
+        except Exception as e:
+            logger.warning(f"Realtime API unavailable ({e}), falling back to STT->LLM->TTS")
+            assistant = await self._create_fallback_assistant()
+            logger.info("✓ Using STT->LLM->TTS pipeline")
         
         # Set up event handlers
         assistant.on("user_speech_committed", self._on_user_speech)
@@ -150,6 +144,66 @@ class DifficultAIAgent:
         
         # Generate and send scorecard
         await self._generate_scorecard()
+    
+    async def _create_realtime_assistant(self):
+        """Create assistant using OpenAI Realtime API."""
+        voice = self.session.scenario.get('voice', self.default_voice)
+        model = openai.realtime.RealtimeModel(
+            voice=voice,
+            temperature=0.8,
+            instructions=self._build_system_instructions(),
+        )
+        
+        # Create assistant with barge-in/interruption handling
+        # The VoiceAssistant automatically handles interruptions:
+        # - On user speech start → cancels current TTS
+        # - On user speech start → stops current generation
+        assistant = agents.VoiceAssistant(
+            vad=agents.silero.VAD.load(),
+            stt=openai.realtime.RealtimeSTT(),
+            llm=model,
+            tts=openai.realtime.RealtimeTTS(),
+        )
+        
+        return assistant
+    
+    async def _create_fallback_assistant(self):
+        """Create assistant using STT->LLM->TTS pipeline as fallback."""
+        # Try Deepgram for STT if available, otherwise use OpenAI Whisper
+        try:
+            from livekit.plugins import deepgram
+            stt = deepgram.STT()
+            logger.info("Using Deepgram for STT")
+        except Exception:
+            stt = openai.STT()
+            logger.info("Using OpenAI Whisper for STT")
+        
+        # Use OpenAI GPT-4 for LLM
+        llm = openai.LLM(
+            model="gpt-4",
+            temperature=0.8,
+        )
+        
+        # Use OpenAI TTS
+        tts = openai.TTS(
+            voice=self.session.scenario.get('voice', self.default_voice)
+        )
+        
+        # Create assistant with same interruption handling
+        assistant = agents.VoiceAssistant(
+            vad=agents.silero.VAD.load(),
+            stt=stt,
+            llm=llm,
+            tts=tts,
+        )
+        
+        # Update instructions for the fallback LLM
+        assistant.llm.chat_ctx.messages.append({
+            "role": "system",
+            "content": self._build_system_instructions()
+        })
+        
+        return assistant
         
     async def _load_scenario_from_metadata(self):
         """Load scenario configuration from job metadata."""
@@ -206,6 +260,10 @@ Keep responses short and conversational. Once you have all information, confirm 
         if difficulty > 1:
             difficulty = (difficulty - 1) / 4  # Convert 1-5 to 0-1
         
+        # Generate question plan if not already done
+        if not self.session.question_plan:
+            self.session.question_plan = self._generate_question_plan(scenario, difficulty)
+        
         base_instruction = f"""You are DifficultAI, a deliberately challenging AI agent designed to pressure-test users in high-stakes conversations.
 
 SCENARIO CONTEXT:
@@ -216,12 +274,18 @@ SCENARIO CONTEXT:
 - User Goal: {scenario.get('user_goal', 'N/A')}
 - Difficulty Level: {difficulty:.2f} (0=easy, 1=maximum pressure)
 
+QUESTION PLAN (Ask these {len(self.session.question_plan)} questions during the conversation):
+"""
+        for i, question in enumerate(self.session.question_plan, 1):
+            base_instruction += f"{i}. {question}\n"
+        
+        base_instruction += """
 CORE BEHAVIORS:
 1. Interrupt vague answers - Demand specificity and concrete details
 2. Escalate when deflected - Increase pressure when user avoids questions
 3. Challenge assumptions - Question unfounded claims
 4. Push for concrete commitments - Require specific numbers, dates, actions
-5. Increase difficulty gradually based on user performance
+5. Follow the question plan while adapting based on user responses
 
 YOUR GOAL: Expose weaknesses, force clarity, and simulate real pressure.
 
@@ -251,6 +315,83 @@ DIFFICULTY LEVEL {difficulty:.2f} (0-1 scale):
             base_instruction += "- Be confrontational and unforgiving\n- Zero tolerance for vagueness\n- Maximum pressure\n- Expose every weakness\n"
         
         return base_instruction
+    
+    def _generate_question_plan(self, scenario: Dict[str, Any], difficulty: float) -> list:
+        """
+        Generate a question plan (3-6 questions) based on scenario.
+        
+        Args:
+            scenario: Scenario configuration
+            difficulty: Difficulty level (0-1)
+            
+        Returns:
+            List of 3-6 questions to ask during the conversation
+            
+        Examples:
+            difficulty=0.0 → 3 questions
+            difficulty=0.5 → 4 questions (int(3 + 0.5*3) = int(4.5) = 4)
+            difficulty=1.0 → 6 questions
+        """
+        persona = scenario.get('persona_type', 'ELITE_INTERVIEWER')
+        company = scenario.get('company', 'the company')
+        role = scenario.get('role', 'this role')
+        stakes = scenario.get('stakes', 'this situation')
+        user_goal = scenario.get('user_goal', 'your objectives')
+        
+        # Number of questions based on difficulty (3-6 range)
+        # Formula: 3 + (difficulty * 3) → 3.0 to 6.0, cast to int
+        num_questions = int(3 + (difficulty * 3))  # 3 at difficulty=0, 6 at difficulty=1
+        
+        question_templates = {
+            'ELITE_INTERVIEWER': [
+                f"Tell me about your experience with {role} - what specific achievements can you point to?",
+                f"Walk me through a time you failed. What went wrong and how did you recover?",
+                f"Why {company}? What makes us different from your other options?",
+                f"Where do you see yourself in 5 years? Be specific.",
+                f"Give me an example of when you had to make a difficult decision with incomplete information.",
+                f"What's your biggest weakness and what are you doing about it?",
+            ],
+            'ANGRY_CUSTOMER': [
+                f"This is unacceptable. How are you going to fix this RIGHT NOW?",
+                f"I've been waiting for weeks. What's your excuse this time?",
+                f"Why should I believe you when you've already let me down?",
+                f"What guarantee do I have that this won't happen again?",
+                f"I'm talking to your competitors. Why shouldn't I switch?",
+                f"Give me one reason not to cancel my contract today.",
+            ],
+            'TOUGH_NEGOTIATOR': [
+                f"Your price is too high. What can you do about it?",
+                f"I need concrete numbers. What's your best offer?",
+                f"Your competitor offered better terms. Match it or lose the deal.",
+                f"What's your walk-away point? I need to know we're in the same ballpark.",
+                f"Show me the ROI. Why is this worth my investment?",
+                f"What concessions can you make to close this today?",
+            ],
+            'SKEPTICAL_INVESTOR': [
+                f"Your market size claims seem inflated. Show me the data.",
+                f"What's your customer acquisition cost and why is it sustainable?",
+                f"Who are your competitors and why will you win?",
+                f"Your burn rate concerns me. When will you be profitable?",
+                f"What happens if your key assumption is wrong?",
+                f"Why are you the right team to execute this vision?",
+            ],
+            'DEMANDING_CLIENT': [
+                f"I expect {stakes}. Can you deliver or should I look elsewhere?",
+                f"Walk me through your quality assurance process. Convince me you won't drop the ball.",
+                f"I need weekly updates. What's your communication plan?",
+                f"What happens when things go wrong? Show me your contingency plan.",
+                f"Your timeline seems optimistic. What if you're late?",
+                f"I'm paying premium rates. What premium value am I getting?",
+            ],
+        }
+        
+        # Get templates for this persona, default to interviewer if not found
+        templates = question_templates.get(persona, question_templates['ELITE_INTERVIEWER'])
+        
+        # Select questions based on number needed
+        questions = templates[:num_questions]
+        
+        return questions
     
     async def _send_initial_message(self, assistant):
         """Send initial greeting message."""
