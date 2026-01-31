@@ -1,5 +1,7 @@
 # Difficult AI
 
+DifficultAI is not a chatbot. It is an agentic LiveKit system that designs, runs, and evaluates high-pressure conversations in real time.
+
 Voice-first adversarial AI that pressure-tests users in high-stakes conversations using real-time interruption, escalation, and measurable performance scoring.
 
 ## Overview
@@ -12,6 +14,51 @@ Difficult AI is a deliberately challenging conversational agent designed to simu
 - **Pushes for concrete commitments** - Requires specific numbers, dates, and actions
 - **Increases difficulty gradually** - Adapts pressure based on user performance
 - **Stops on interruption** - Immediately adapts when the user interrupts
+
+## Architecture
+
+DifficultAI is built as an **agent platform**, not just a single chatbot. The system consists of four specialized agents that work together:
+
+### Agent Workforce
+
+```
+agents/
+├── architect.py      # Designs interview scenarios and conversation structures
+├── researcher.py     # Gathers company and role context
+├── adversary.py      # Live conversational agent (the "Difficult AI")
+└── evaluator.py      # Scores performance and provides feedback
+```
+
+This agentic architecture allows the system to:
+1. **Design** customized scenarios based on role, company, and difficulty
+2. **Research** context to make conversations realistic
+3. **Execute** high-pressure conversations in real-time
+4. **Evaluate** performance with structured feedback
+
+### LiveKit Integration
+
+The `apps/livekit_agent/` runtime orchestrates the agent workflow for real-time voice interactions:
+
+```python
+from apps.livekit_agent import LiveKitAgentRuntime
+from agents.architect import PersonaType
+
+runtime = LiveKitAgentRuntime()
+
+# Set up scenario
+scenario = runtime.setup_scenario(
+    persona_type=PersonaType.ELITE_INTERVIEWER,
+    company="TechCorp",
+    role="Senior Software Engineer",
+    stakes="Final round interview",
+    user_goal="Get job offer",
+    difficulty=3
+)
+
+# Run conversation → get evaluation
+```
+
+See [docs/scenario_contract.md](docs/scenario_contract.md) for the full scenario specification.
 
 ## Purpose
 
