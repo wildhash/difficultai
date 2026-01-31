@@ -13,8 +13,13 @@ class TestDifficultAI(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Mock the OpenAI client to avoid API calls during testing
-        with patch('difficult_ai.OpenAI'):
-            self.agent = DifficultAI(api_key="test_key")
+        self.mock_openai_patcher = patch('difficult_ai.OpenAI')
+        self.mock_openai = self.mock_openai_patcher.start()
+        self.agent = DifficultAI(api_key="test_key")
+    
+    def tearDown(self):
+        """Clean up test fixtures."""
+        self.mock_openai_patcher.stop()
     
     def test_initialization(self):
         """Test that the agent initializes correctly."""
@@ -156,8 +161,13 @@ class TestResponseAnalysis(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        with patch('difficult_ai.OpenAI'):
-            self.agent = DifficultAI(api_key="test_key")
+        self.mock_openai_patcher = patch('difficult_ai.OpenAI')
+        self.mock_openai = self.mock_openai_patcher.start()
+        self.agent = DifficultAI(api_key="test_key")
+    
+    def tearDown(self):
+        """Clean up test fixtures."""
+        self.mock_openai_patcher.stop()
     
     def test_vague_indicators_detected(self):
         """Test that various vague indicators are detected."""

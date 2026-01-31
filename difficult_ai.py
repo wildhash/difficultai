@@ -114,7 +114,13 @@ When responding, be direct, challenging, and push for concrete answers. No pleas
         
         # Check for concrete commitments (numbers, dates, specific actions)
         has_numbers = any(char.isdigit() for char in user_message)
-        has_specific_date = any(word in message_lower for word in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"])
+        
+        # Check for specific dates (weekdays or months)
+        weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        months = ["january", "february", "march", "april", "may", "june", "july", 
+                  "august", "september", "october", "november", "december"]
+        has_specific_date = any(word in message_lower for word in weekdays + months)
+        
         has_action_verb = any(word in message_lower for word in ["will", "commit to", "promise", "guarantee", "deliver"])
         
         is_concrete = has_numbers or has_specific_date or has_action_verb
@@ -196,8 +202,8 @@ When responding, be direct, challenging, and push for concrete answers. No pleas
             The agent's response
         """
         # Check if user is interrupting (indicated by short, directive messages)
-        interruption_indicators = user_message.lower().strip()
-        if len(user_message.split()) <= 3 and any(word in interruption_indicators for word in ["wait", "stop", "hold on", "let me", "actually"]):
+        message_lower = user_message.lower().strip()
+        if len(user_message.split()) <= 3 and any(word in message_lower for word in ["wait", "stop", "hold on", "let me", "actually"]):
             self.interrupted = True
         
         # Analyze response quality
