@@ -60,6 +60,27 @@ scenario = runtime.setup_scenario(
 
 See [docs/scenario_contract.md](docs/scenario_contract.md) for the full scenario specification.
 
+## Repository Structure
+
+```
+difficultai/
+├── agents/                    # Agent workforce
+│   ├── architect.py          # Designs interview scenarios
+│   ├── researcher.py         # Gathers company + role context
+│   ├── adversary.py          # Live conversational agent
+│   └── evaluator.py          # Scoring + feedback
+├── apps/                     
+│   └── livekit_agent/        # LiveKit agent runtime (not a background worker)
+├── docs/
+│   └── scenario_contract.md  # Scenario schema specification
+├── difficult_ai.py           # Core adversarial agent implementation
+├── examples.py               # Simple usage examples
+├── example_agent_workflow.py # Complete agent workflow demo
+└── tests/                    # Test suites
+```
+
+This structure makes the agent roles explicit and allows scaling from a single agent to an agentic workforce without refactors.
+
 ## Purpose
 
 This agent is designed for:
@@ -104,6 +125,20 @@ Commands:
 - Type your response normally to continue the conversation
 - Type `stats` to see your current performance metrics
 - Type `quit` to exit and see final statistics
+
+### Agent Workflow Demo
+
+See the complete agent workflow in action:
+
+```bash
+python example_agent_workflow.py
+```
+
+This demonstrates:
+- Architect designing scenarios
+- Researcher gathering context
+- Adversary running conversations
+- Evaluator providing feedback
 
 ### Programmatic Usage
 
