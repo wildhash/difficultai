@@ -1,2 +1,218 @@
-# difficultai
+# Difficult AI
+
 Voice-first adversarial AI that pressure-tests users in high-stakes conversations using real-time interruption, escalation, and measurable performance scoring.
+
+## Overview
+
+Difficult AI is a deliberately challenging conversational agent designed to simulate high-pressure interactions. Unlike typical helpful AI assistants, Difficult AI:
+
+- **Interrupts vague answers** - Demands specificity and concrete details
+- **Escalates when deflected** - Increases pressure when users avoid questions
+- **Challenges assumptions** - Questions unfounded claims and weak reasoning
+- **Pushes for concrete commitments** - Requires specific numbers, dates, and actions
+- **Increases difficulty gradually** - Adapts pressure based on user performance
+- **Stops on interruption** - Immediately adapts when the user interrupts
+
+## Purpose
+
+This agent is designed for:
+- **Sales training** - Practice handling difficult prospects
+- **Interview preparation** - Prepare for challenging questions
+- **Presentation practice** - Test your ability to defend ideas under pressure
+- **Negotiation training** - Develop skills in high-stakes conversations
+- **Leadership development** - Build confidence in confrontational situations
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/wildhash/difficultai.git
+cd difficultai
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Set up your OpenAI API key:
+```bash
+cp .env.example .env
+# Edit .env and add your OpenAI API key
+```
+
+## Usage
+
+### Interactive Mode
+
+Run the agent in interactive mode:
+
+```bash
+python difficult_ai.py
+```
+
+This starts a conversation where the AI will challenge your responses. Type your answers and see how the AI responds based on your clarity and specificity.
+
+Commands:
+- Type your response normally to continue the conversation
+- Type `stats` to see your current performance metrics
+- Type `quit` to exit and see final statistics
+
+### Programmatic Usage
+
+```python
+from difficult_ai import DifficultAI
+
+# Initialize the agent
+agent = DifficultAI()
+
+# Have a conversation
+response = agent.chat("I'm working on improving our sales process")
+print(response)
+
+# Check your performance
+stats = agent.get_stats()
+print(f"Difficulty Level: {stats['difficulty_level']}/5")
+print(f"Commitments Made: {stats['commitments_made']}")
+```
+
+### Example Scenarios
+
+Run example scenarios to see how the AI behaves:
+
+```bash
+python examples.py
+```
+
+This demonstrates various conversation patterns and the AI's responses.
+
+## How It Works
+
+### Difficulty Levels
+
+The agent operates on a 5-level difficulty scale:
+
+1. **Level 1** - Firm but professional questioning
+2. **Level 2** - Direct challenges to vague statements
+3. **Level 3** - Aggressive interruption of deflections
+4. **Level 4** - Confrontational, exposing contradictions
+5. **Level 5** - Maximum pressure, zero tolerance for vagueness
+
+### Response Analysis
+
+The agent analyzes each user response for:
+
+- **Vagueness** - Detects words like "maybe," "probably," "kind of"
+- **Deflection** - Identifies attempts to change the subject
+- **Concreteness** - Looks for specific numbers, dates, and commitments
+- **Interruptions** - Recognizes when the user needs to interject
+
+### Escalation Logic
+
+Difficulty increases when:
+- User gives 2+ vague responses
+- User deflects 2+ times
+- User fails to provide concrete details
+
+Difficulty decreases when:
+- User makes multiple concrete commitments
+- User provides specific, clear answers consistently
+
+### Commitment Tracking
+
+The agent tracks commitments containing phrases like:
+- "I will..."
+- "I'll..."
+- "I commit to..."
+- "I promise..."
+- "I guarantee..."
+- "By [date/time]..."
+
+## Performance Metrics
+
+The agent tracks:
+- **Difficulty Level** - Current pressure level (1-5)
+- **Vague Responses** - Count of unclear answers
+- **Deflections** - Count of topic changes/avoidances
+- **Commitments Made** - Specific promises extracted from responses
+- **Total Exchanges** - Number of back-and-forth exchanges
+
+## Testing
+
+Run the test suite:
+
+```bash
+python -m pytest test_difficult_ai.py -v
+```
+
+Or using unittest:
+
+```bash
+python -m unittest test_difficult_ai.py -v
+```
+
+## API Reference
+
+### DifficultAI Class
+
+#### Methods
+
+- `__init__(api_key=None, model="gpt-4")` - Initialize the agent
+- `chat(user_message: str) -> str` - Process a message and get a response
+- `get_stats() -> Dict` - Get current performance statistics
+- `reset()` - Reset conversation state
+
+#### Properties
+
+- `difficulty_level` - Current difficulty (1-5)
+- `vague_response_count` - Number of vague responses detected
+- `deflection_count` - Number of deflections detected
+- `commitments_made` - List of commitments tracked
+- `conversation_history` - Full conversation log
+
+## Configuration
+
+The agent can be customized by modifying:
+- **Model** - Change the OpenAI model (default: gpt-4)
+- **Temperature** - Adjust response variability (default: 0.8)
+- **Max Tokens** - Control response length (default: 150)
+
+## Examples
+
+### Example 1: Vague Response
+
+```
+You: Maybe I'll work on it next week
+AI: "Maybe"? That's not a plan. Give me a specific day and time.
+```
+
+### Example 2: Concrete Commitment
+
+```
+You: I will deliver 5 units by Friday at 2pm
+AI: Good. That's specific. I'm holding you to that. What's your backup plan?
+```
+
+### Example 3: Deflection
+
+```
+You: Let's talk about the budget first
+AI: No. You're deflecting. Answer my question: What's your progress?
+```
+
+## License
+
+This project is open source and available for educational and training purposes.
+
+## Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
+
+## Disclaimer
+
+This AI is designed to be challenging and confrontational for training purposes. It is not suitable for general conversation or customer-facing applications. Use responsibly and in appropriate training contexts only.
