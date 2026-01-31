@@ -111,9 +111,56 @@ cp .env.example .env
 
 ## Usage
 
-### Interactive Mode
+### Voice-to-Voice LiveKit Agent (Production)
 
-Run the agent in interactive mode:
+Run the production LiveKit agent for real-time voice interactions:
+
+```bash
+# 1. Set up environment variables
+cp .env.example .env
+# Edit .env with your LiveKit and OpenAI credentials
+
+# 2. Run the agent
+python apps/livekit_agent/agent.py dev
+```
+
+The agent will:
+- Connect to your LiveKit server
+- Accept voice connections from users
+- Conduct high-pressure training conversations
+- Generate performance scorecards
+
+#### Quick Start with LiveKit
+
+1. **Get LiveKit credentials**:
+   - Sign up at https://cloud.livekit.io (free tier available)
+   - Get your LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET
+
+2. **Configure `.env`**:
+   ```bash
+   OPENAI_API_KEY=sk-...
+   LIVEKIT_URL=wss://your-project.livekit.cloud
+   LIVEKIT_API_KEY=APIxxxxx
+   LIVEKIT_API_SECRET=xxxxx
+   DEFAULT_VOICE=marin
+   ```
+
+3. **Run the agent**:
+   ```bash
+   python apps/livekit_agent/agent.py dev
+   ```
+
+4. **Connect a client**:
+   - Use LiveKit web client or SDK to join a room
+   - Agent will ask for scenario details or read from room metadata
+   - Have your training conversation
+   - Receive scorecard at the end
+
+See [apps/livekit_agent/README.md](apps/livekit_agent/README.md) for deployment and advanced configuration.
+
+### Interactive Mode (Development)
+
+Run the agent in interactive text mode for testing:
 
 ```bash
 python difficult_ai.py
