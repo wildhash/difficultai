@@ -113,22 +113,31 @@ cp .env.example .env
 
 ### Voice-to-Voice LiveKit Agent (Production)
 
-Run the production LiveKit agent for real-time voice interactions:
+**One-command start:**
 
 ```bash
-# 1. Set up environment variables
-cp .env.example .env
-# Edit .env with your LiveKit and OpenAI credentials
+# Using Makefile (recommended)
+make dev
 
-# 2. Run the agent
+# Or using Python module
+python -m apps.livekit_agent dev
+
+# Or directly
 python apps/livekit_agent/agent.py dev
 ```
 
-The agent will:
-- Connect to your LiveKit server
-- Accept voice connections from users
-- Conduct high-pressure training conversations
-- Generate performance scorecards
+**Smoke test (verify setup):**
+
+```bash
+make smoke-test
+```
+
+The smoke test verifies:
+- ✓ Environment variables are set
+- ✓ Dependencies are installed
+- ✓ Scenario validation works
+- ✓ LiveKit server is accessible
+- ✓ Agent components are functional
 
 #### Quick Start with LiveKit
 
@@ -138,16 +147,18 @@ The agent will:
 
 2. **Configure `.env`**:
    ```bash
-   OPENAI_API_KEY=sk-...
-   LIVEKIT_URL=wss://your-project.livekit.cloud
-   LIVEKIT_API_KEY=APIxxxxx
-   LIVEKIT_API_SECRET=xxxxx
-   DEFAULT_VOICE=marin
+   cp .env.example .env
+   # Edit .env with your credentials:
+   # OPENAI_API_KEY=sk-...
+   # LIVEKIT_URL=wss://your-project.livekit.cloud
+   # LIVEKIT_API_KEY=APIxxxxx
+   # LIVEKIT_API_SECRET=xxxxx
+   # DEFAULT_VOICE=marin
    ```
 
 3. **Run the agent**:
    ```bash
-   python apps/livekit_agent/agent.py dev
+   make dev
    ```
 
 4. **Connect a client**:
@@ -155,6 +166,40 @@ The agent will:
    - Agent will ask for scenario details or read from room metadata
    - Have your training conversation
    - Receive scorecard at the end
+
+#### Architecture: Voice-to-Voice with Realtime API
+
+DifficultAI uses **OpenAI's Realtime API** for native voice-to-voice conversation:
+
+- ✓ **NOT** an STT→LLM→TTS pipeline
+- ✓ Lower latency (no transcription overhead)
+- ✓ Natural prosody and timing
+- ✓ Built-in barge-in support (interruption handling)
+
+**Interruption Handling:**
+- On user speech start → automatically cancels current TTS
+- On user speech start → automatically stops current generation
+- Creates "feels alive" responsive conversation
+
+#### Scenario Configuration
+
+**Canonical ScenarioConfig:**
+```json
+{
+  "persona": "ELITE_INTERVIEWER",
+  "difficulty": 0.8,
+  "company": "TechCorp",
+  "role": "Senior SWE",
+  "goals": "Get job offer"
+}
+```
+
+**Difficulty Scale:** 0-1 (float)
+- 0.0 = Easy, professional questioning
+- 0.5 = Moderate, challenging questions
+- 1.0 = Maximum pressure, confrontational
+
+See [docs/scenario_contract.md](docs/scenario_contract.md) for full specification.
 
 See [apps/livekit_agent/README.md](apps/livekit_agent/README.md) for deployment and advanced configuration.
 
