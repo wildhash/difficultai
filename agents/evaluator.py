@@ -116,7 +116,16 @@ class EvaluatorAgent:
         return evaluation
     
     def _convert_to_10_scale(self, score_100: float) -> float:
-        """Convert a 0-100 score to 1-10 scale."""
+        """
+        Convert a 0-100 score to 1-10 scale.
+        
+        Examples:
+            0 → 1.0
+            50 → 5.5
+            100 → 10.0
+        
+        Formula: 1 + (score_100 / 100.0) * 9
+        """
         # Map 0-100 to 1-10 (never give 0, minimum is 1)
         return max(1.0, min(10.0, 1 + (score_100 / 100.0) * 9))
     

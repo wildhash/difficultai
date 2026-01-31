@@ -326,6 +326,11 @@ DIFFICULTY LEVEL {difficulty:.2f} (0-1 scale):
             
         Returns:
             List of 3-6 questions to ask during the conversation
+            
+        Examples:
+            difficulty=0.0 → 3 questions
+            difficulty=0.5 → 4 questions (int(3 + 0.5*3) = int(4.5) = 4)
+            difficulty=1.0 → 6 questions
         """
         persona = scenario.get('persona_type', 'ELITE_INTERVIEWER')
         company = scenario.get('company', 'the company')
@@ -334,6 +339,7 @@ DIFFICULTY LEVEL {difficulty:.2f} (0-1 scale):
         user_goal = scenario.get('user_goal', 'your objectives')
         
         # Number of questions based on difficulty (3-6 range)
+        # Formula: 3 + (difficulty * 3) → 3.0 to 6.0, cast to int
         num_questions = int(3 + (difficulty * 3))  # 3 at difficulty=0, 6 at difficulty=1
         
         question_templates = {
