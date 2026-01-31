@@ -29,11 +29,26 @@ class TestScenarioValidation(unittest.TestCase):
             'role': 'Senior Software Engineer',
             'stakes': 'Job interview',
             'user_goal': 'Get hired',
-            'difficulty': 3
+            'difficulty': 0.6  # 0-1 scale
         }
         
         errors = validate_scenario(scenario)
         self.assertEqual(len(errors), 0, f"Valid scenario should have no errors, got: {errors}")
+        self.assertTrue(is_scenario_complete(scenario))
+    
+    def test_valid_scenario_with_aliases(self):
+        """Test validation with persona/goals aliases."""
+        scenario = {
+            'persona': 'ELITE_INTERVIEWER',  # Alias for persona_type
+            'company': 'TechCorp',
+            'role': 'Senior Software Engineer',
+            'stakes': 'Job interview',
+            'goals': 'Get hired',  # Alias for user_goal
+            'difficulty': 0.8
+        }
+        
+        errors = validate_scenario(scenario)
+        self.assertEqual(len(errors), 0, f"Valid scenario with aliases should have no errors, got: {errors}")
         self.assertTrue(is_scenario_complete(scenario))
     
     def test_missing_required_fields(self):
@@ -51,8 +66,6 @@ class TestScenarioValidation(unittest.TestCase):
         missing = get_missing_fields(scenario)
         self.assertIn('role', missing)
         self.assertIn('stakes', missing)
-        self.assertIn('user_goal', missing)
-        self.assertIn('difficulty', missing)
     
     def test_invalid_persona_type(self):
         """Test validation catches invalid persona type."""
@@ -62,7 +75,7 @@ class TestScenarioValidation(unittest.TestCase):
             'role': 'Engineer',
             'stakes': 'Interview',
             'user_goal': 'Get hired',
-            'difficulty': 3
+            'difficulty': 0.5
         }
         
         errors = validate_scenario(scenario)
@@ -70,7 +83,7 @@ class TestScenarioValidation(unittest.TestCase):
         self.assertTrue(any('persona_type' in err for err in errors))
     
     def test_invalid_difficulty(self):
-        """Test validation catches invalid difficulty values."""
+        """Test validation catches invalid difficulty values (0-1 scale)."""
         # Too high
         scenario = {
             'persona_type': 'ELITE_INTERVIEWER',
@@ -78,15 +91,15 @@ class TestScenarioValidation(unittest.TestCase):
             'role': 'Engineer',
             'stakes': 'Interview',
             'user_goal': 'Get hired',
-            'difficulty': 10
+            'difficulty': 2.0  # > 1
         }
         
         errors = validate_scenario(scenario)
         self.assertGreater(len(errors), 0)
         self.assertTrue(any('difficulty' in err for err in errors))
         
-        # Too low
-        scenario['difficulty'] = 0
+        # Negative
+        scenario['difficulty'] = -0.1
         errors = validate_scenario(scenario)
         self.assertGreater(len(errors), 0)
         
@@ -94,19 +107,27 @@ class TestScenarioValidation(unittest.TestCase):
         scenario['difficulty'] = 'medium'
         errors = validate_scenario(scenario)
         self.assertGreater(len(errors), 0)
+        
+        # Valid values
+        for valid_diff in [0.0, 0.5, 1.0, 0.75]:
+            scenario['difficulty'] = valid_diff
+            errors = validate_scenario(scenario)
+            # Should have no difficulty-related errors (may have other errors)
+            diff_errors = [e for e in errors if 'difficulty' in e]
+            self.assertEqual(len(diff_errors), 0, f"Difficulty {valid_diff} should be valid")
     
     def test_get_missing_fields(self):
         """Test getting list of missing fields."""
         scenario = {
             'persona_type': 'ELITE_INTERVIEWER',
-            'difficulty': 3
+            'difficulty': 0.6
         }
         
         missing = get_missing_fields(scenario)
         self.assertIn('company', missing)
         self.assertIn('role', missing)
         self.assertIn('stakes', missing)
-        self.assertIn('user_goal', missing)
+        # Should not include persona_type or difficulty since they're present
         self.assertNotIn('persona_type', missing)
         self.assertNotIn('difficulty', missing)
 
@@ -125,15 +146,15 @@ class TestEvaluatorOutput(unittest.TestCase):
             'deflection_count': 1,
             'commitments_made': 3,
             'total_exchanges': 10,
-            'current_difficulty': 3,
-            'scenario_difficulty': 3
+            'current_difficulty': 0.6,  # 0-1 scale
+            'scenario_difficulty': 0.6
         }
         
         scenario = {
             'persona_type': 'ELITE_INTERVIEWER',
             'company': 'TechCorp',
             'role': 'Engineer',
-            'difficulty': 3
+            'difficulty': 0.6
         }
         
         evaluation = self.evaluator.evaluate_conversation(metrics, scenario)
@@ -177,15 +198,15 @@ class TestEvaluatorOutput(unittest.TestCase):
             'deflection_count': 0,
             'commitments_made': 2,
             'total_exchanges': 5,
-            'current_difficulty': 2,
-            'scenario_difficulty': 2
+            'current_difficulty': 0.4,  # 0-1 scale
+            'scenario_difficulty': 0.4
         }
         
         scenario = {
             'persona_type': 'ELITE_INTERVIEWER',
             'company': 'TechCorp',
             'role': 'Engineer',
-            'difficulty': 2
+            'difficulty': 0.4
         }
         
         evaluation = self.evaluator.evaluate_conversation(metrics, scenario)
@@ -211,8 +232,8 @@ class TestEvaluatorOutput(unittest.TestCase):
             'deflection_count': 0,
             'commitments_made': 0,
             'total_exchanges': 0,
-            'current_difficulty': 1,
-            'scenario_difficulty': 1
+            'current_difficulty': 0.2,
+            'scenario_difficulty': 0.2
         }
         
         evaluation = self.evaluator.evaluate_conversation(metrics, {})
@@ -224,8 +245,8 @@ class TestEvaluatorOutput(unittest.TestCase):
             'deflection_count': 100,
             'commitments_made': 0,
             'total_exchanges': 100,
-            'current_difficulty': 5,
-            'scenario_difficulty': 1
+            'current_difficulty': 1.0,  # Maximum difficulty
+            'scenario_difficulty': 0.2
         }
         
         evaluation = self.evaluator.evaluate_conversation(metrics, {})

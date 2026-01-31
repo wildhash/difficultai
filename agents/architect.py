@@ -30,23 +30,32 @@ class Scenario:
     Scenario contract that defines a high-pressure conversation.
     
     This structure is shared across all agents (research → adversary → evaluator).
+    
+    Canonical ScenarioConfig fields:
+    - persona: PersonaType enum (ANGRY_CUSTOMER, ELITE_INTERVIEWER, etc.)
+    - difficulty: float 0-1 (0 = easy, 1 = maximum pressure)
+    - company: str
+    - role: str
+    - goals: str (user_goal)
     """
-    persona_type: PersonaType
+    persona_type: PersonaType  # Also referred to as "persona"
     company: str
     role: str
     stakes: str
-    user_goal: str
-    difficulty: int  # 1-5
+    user_goal: str  # Also referred to as "goals"
+    difficulty: float  # 0-1 scale (0 = easy, 1 = maximum pressure)
     source_docs: Optional[List[str]] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert scenario to dictionary."""
         return {
             "persona_type": self.persona_type.value,
+            "persona": self.persona_type.value,  # Alias for consistency
             "company": self.company,
             "role": self.role,
             "stakes": self.stakes,
             "user_goal": self.user_goal,
+            "goals": self.user_goal,  # Alias for consistency
             "difficulty": self.difficulty,
             "source_docs": self.source_docs or []
         }

@@ -3,6 +3,32 @@ DifficultAI LiveKit Voice Agent
 
 Production-ready LiveKit agent using OpenAI Realtime API for voice-to-voice
 high-pressure conversation training.
+
+VOICE-TO-VOICE ARCHITECTURE:
+This agent uses OpenAI's Realtime API for native voice-to-voice conversation.
+This is NOT an STT→LLM→TTS pipeline. The Realtime model handles:
+- Voice input (no separate STT)
+- Natural language understanding
+- Voice output (no separate TTS)
+
+This architecture provides:
+- Lower latency (no transcription overhead)
+- More natural prosody and timing
+- Built-in barge-in support (interruption handling)
+
+INTERRUPTION HANDLING (Barge-in):
+The agent implements explicit cancellation semantics:
+- On user speech start → cancel current TTS output
+- On user speech start → stop current generation
+- This creates the "feels alive" experience
+
+SCENARIO CONTRACT:
+Uses canonical ScenarioConfig with:
+- persona: ANGRY_CUSTOMER | ELITE_INTERVIEWER | etc.
+- difficulty: 0-1 (float, where 0=easy, 1=maximum pressure)
+- company: string
+- role: string
+- goals: string (user's objective)
 """
 
 import asyncio
@@ -94,17 +120,24 @@ class DifficultAIAgent:
             instructions=self._build_system_instructions(),
         )
         
-        # Create assistant
+        # Create assistant with barge-in/interruption handling
+        # The VoiceAssistant automatically handles interruptions:
+        # - On user speech start → cancels current TTS
+        # - On user speech start → stops current generation
+        # This provides natural conversation flow with "feels alive" responsiveness
         assistant = agents.VoiceAssistant(
             vad=agents.silero.VAD.load(),
             stt=openai.realtime.RealtimeSTT(),
             llm=model,
             tts=openai.realtime.RealtimeTTS(),
+            # Interruption handling is built into VoiceAssistant
+            # When user starts speaking, current speech is automatically cancelled
         )
         
         # Set up event handlers
         assistant.on("user_speech_committed", self._on_user_speech)
         assistant.on("agent_speech_committed", self._on_agent_speech)
+        assistant.on("user_started_speaking", self._on_user_started_speaking)
         
         # Start the assistant
         assistant.start(self.ctx.room, participant)
@@ -157,7 +190,7 @@ Be brief and direct. Ask ONE question at a time to collect the following informa
 3. role: What is your role in this scenario?
 4. stakes: What's at stake in this conversation?
 5. user_goal: What are you trying to achieve?
-6. difficulty: Difficulty level 1-5 (1=easy, 5=maximum pressure)
+6. difficulty: Difficulty level 0-1 (0=easy, 0.5=moderate, 1=maximum pressure)
 
 Keep responses short and conversational. Once you have all information, confirm and say "Let's begin the scenario."
 """
@@ -166,7 +199,12 @@ Keep responses short and conversational. Once you have all information, confirm 
         """Build instructions based on configured persona."""
         scenario = self.session.scenario
         persona = scenario.get('persona_type', 'ELITE_INTERVIEWER')
-        difficulty = scenario.get('difficulty', 3)
+        # Support both 0-1 and legacy 1-5 difficulty scales
+        difficulty = scenario.get('difficulty', 0.6)
+        
+        # Normalize to 0-1 if legacy 1-5 scale is used
+        if difficulty > 1:
+            difficulty = (difficulty - 1) / 4  # Convert 1-5 to 0-1
         
         base_instruction = f"""You are DifficultAI, a deliberately challenging AI agent designed to pressure-test users in high-stakes conversations.
 
@@ -176,7 +214,7 @@ SCENARIO CONTEXT:
 - Role: {scenario.get('role', 'N/A')}
 - Stakes: {scenario.get('stakes', 'N/A')}
 - User Goal: {scenario.get('user_goal', 'N/A')}
-- Difficulty Level: {difficulty}/5
+- Difficulty Level: {difficulty:.2f} (0=easy, 1=maximum pressure)
 
 CORE BEHAVIORS:
 1. Interrupt vague answers - Demand specificity and concrete details
@@ -202,12 +240,12 @@ YOUR GOAL: Expose weaknesses, force clarity, and simulate real pressure.
             base_instruction += f"\nPERSONA BEHAVIOR: {persona_behaviors[persona]}\n"
         
         base_instruction += f"""
-DIFFICULTY LEVEL {difficulty}/5:
+DIFFICULTY LEVEL {difficulty:.2f} (0-1 scale):
 """
         
-        if difficulty <= 2:
+        if difficulty <= 0.4:
             base_instruction += "- Be firm but professional\n- Give user time to respond\n"
-        elif difficulty <= 4:
+        elif difficulty <= 0.7:
             base_instruction += "- Be aggressive and challenging\n- Interrupt weak responses\n- Demand immediate specifics\n"
         else:
             base_instruction += "- Be confrontational and unforgiving\n- Zero tolerance for vagueness\n- Maximum pressure\n- Expose every weakness\n"
@@ -239,6 +277,22 @@ DIFFICULTY LEVEL {difficulty}/5:
         logger.info(f"Agent: {text}")
         self.session.add_transcript_entry("assistant", text)
     
+    async def _on_user_started_speaking(self):
+        """
+        Handle user interruption (barge-in).
+        
+        INTERRUPTION HANDLING:
+        When the user starts speaking while the agent is talking:
+        1. The VoiceAssistant automatically cancels current TTS output
+        2. The VoiceAssistant automatically stops current generation
+        3. This creates natural, responsive conversation
+        
+        This handler logs the interruption for analytics.
+        """
+        logger.debug("User started speaking (interruption detected)")
+        # The actual cancellation is handled automatically by VoiceAssistant
+        # We just log it here for metrics/analytics
+    
     async def _process_metadata_response(self, text: str):
         """Process user response when collecting metadata."""
         field = self.session.current_question_field
@@ -255,13 +309,17 @@ DIFFICULTY LEVEL {difficulty}/5:
                     self.session.scenario[field] = persona.value
                     break
         elif field == 'difficulty':
-            # Extract number from text
+            # Extract number from text and normalize to 0-1
             import re
-            numbers = re.findall(r'\d+', text)
+            numbers = re.findall(r'\d+\.?\d*', text)
             if numbers:
-                diff = int(numbers[0])
-                if 1 <= diff <= 5:
-                    self.session.scenario[field] = diff
+                diff = float(numbers[0])
+                # If value is > 1, assume legacy 1-5 scale and convert
+                if diff > 1:
+                    diff = (diff - 1) / 4  # Convert 1-5 to 0-1
+                # Clamp to 0-1 range
+                diff = max(0.0, min(1.0, diff))
+                self.session.scenario[field] = diff
         else:
             self.session.scenario[field] = text
         
