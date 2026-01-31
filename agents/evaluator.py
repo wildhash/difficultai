@@ -17,12 +17,13 @@ from dataclasses import dataclass
 
 @dataclass
 class PerformanceScore:
-    """Performance scoring across multiple dimensions."""
-    clarity: float  # 0-100: How clear and specific were responses
-    confidence: float  # 0-100: Confidence level demonstrated
-    commitment: float  # 0-100: Quality of commitments made
-    adaptability: float  # 0-100: Ability to adapt under pressure
-    overall: float  # 0-100: Overall performance score
+    """Performance scoring across multiple dimensions (1-10 scale)."""
+    clarity: float  # 1-10: How clear and specific were responses
+    confidence: float  # 1-10: Confidence level demonstrated
+    commitment: float  # 1-10: Quality of commitments made
+    adaptability: float  # 1-10: Ability to adapt under pressure
+    composure: float  # 1-10: Ability to stay calm under pressure
+    effectiveness: float  # 1-10: Overall effectiveness in achieving goals
     
     def to_dict(self) -> Dict[str, float]:
         """Convert to dictionary."""
@@ -31,16 +32,15 @@ class PerformanceScore:
             "confidence": self.confidence,
             "commitment": self.commitment,
             "adaptability": self.adaptability,
-            "overall": self.overall
+            "composure": self.composure,
+            "effectiveness": self.effectiveness
         }
 
 
 @dataclass
 class Feedback:
     """Structured feedback for user performance."""
-    strengths: List[str]
-    weaknesses: List[str]
-    recommendations: List[str]
+    coaching_points: List[str]  # Exactly 3 coaching bullets
     key_moments: List[str]  # Specific conversation moments to review
 
 
@@ -71,39 +71,41 @@ class EvaluatorAgent:
             transcript: Optional conversation transcript
             
         Returns:
-            Evaluation results with scores and feedback
+            Evaluation results with 6 scores (1-10) and 3 coaching bullets
         """
-        # Calculate dimension scores
+        # Calculate dimension scores (0-100 internally, will convert to 1-10)
         clarity_score = self._calculate_clarity_score(metrics)
         confidence_score = self._calculate_confidence_score(metrics)
         commitment_score = self._calculate_commitment_score(metrics)
         adaptability_score = self._calculate_adaptability_score(metrics)
+        composure_score = self._calculate_composure_score(metrics)
         
-        # Calculate overall score
-        overall_score = (
-            clarity_score * 0.3 +
+        # Calculate effectiveness score based on overall performance
+        effectiveness_score = (
+            clarity_score * 0.25 +
             confidence_score * 0.2 +
-            commitment_score * 0.3 +
-            adaptability_score * 0.2
+            commitment_score * 0.25 +
+            adaptability_score * 0.15 +
+            composure_score * 0.15
         )
         
+        # Convert from 0-100 scale to 1-10 scale
         scores = PerformanceScore(
-            clarity=clarity_score,
-            confidence=confidence_score,
-            commitment=commitment_score,
-            adaptability=adaptability_score,
-            overall=overall_score
+            clarity=self._convert_to_10_scale(clarity_score),
+            confidence=self._convert_to_10_scale(confidence_score),
+            commitment=self._convert_to_10_scale(commitment_score),
+            adaptability=self._convert_to_10_scale(adaptability_score),
+            composure=self._convert_to_10_scale(composure_score),
+            effectiveness=self._convert_to_10_scale(effectiveness_score)
         )
         
-        # Generate feedback
+        # Generate feedback with exactly 3 coaching bullets
         feedback = self._generate_feedback(metrics, scores, scenario)
         
         evaluation = {
             "scores": scores.to_dict(),
             "feedback": {
-                "strengths": feedback.strengths,
-                "weaknesses": feedback.weaknesses,
-                "recommendations": feedback.recommendations,
+                "coaching_points": feedback.coaching_points[:3],  # Ensure exactly 3
                 "key_moments": feedback.key_moments
             },
             "metrics": metrics,
@@ -112,6 +114,35 @@ class EvaluatorAgent:
         
         self.evaluations.append(evaluation)
         return evaluation
+    
+    def _convert_to_10_scale(self, score_100: float) -> float:
+        """Convert a 0-100 score to 1-10 scale."""
+        # Map 0-100 to 1-10 (never give 0, minimum is 1)
+        return max(1.0, min(10.0, 1 + (score_100 / 100.0) * 9))
+    
+    def _calculate_composure_score(self, metrics: Dict[str, Any]) -> float:
+        """
+        Calculate composure score based on how well user maintained calm.
+        
+        Args:
+            metrics: Performance metrics
+            
+        Returns:
+            Composure score (0-100, will be converted to 1-10)
+        """
+        # Composure is inversely related to both vague responses and deflections
+        vague_count = metrics.get("vague_response_count", 0)
+        deflection_count = metrics.get("deflection_count", 0)
+        total_exchanges = metrics.get("total_exchanges", 1)
+        
+        if total_exchanges == 0:
+            return 100.0
+        
+        # Both vague responses and deflections indicate loss of composure
+        stress_indicators = (vague_count + deflection_count) / total_exchanges
+        score = 100.0 - (stress_indicators * 50)  # Less penalty than for clarity/confidence alone
+        
+        return max(0.0, min(100.0, score))
     
     def _calculate_clarity_score(self, metrics: Dict[str, Any]) -> float:
         """
@@ -212,63 +243,86 @@ class EvaluatorAgent:
         scenario: Optional[Dict[str, Any]]
     ) -> Feedback:
         """
-        Generate structured feedback based on performance.
+        Generate structured feedback with exactly 3 coaching points.
         
         Args:
             metrics: Performance metrics
-            scores: Calculated scores
+            scores: Calculated scores (1-10 scale)
             scenario: Scenario context
             
         Returns:
-            Structured feedback
+            Structured feedback with 3 coaching bullets
         """
-        strengths = []
-        weaknesses = []
-        recommendations = []
+        coaching_candidates = []
         key_moments = []
         
-        # Analyze clarity
-        if scores.clarity >= 80:
-            strengths.append("Clear and specific communication")
-        elif scores.clarity < 50:
-            weaknesses.append("Frequent vague or unclear responses")
-            recommendations.append("Practice giving specific answers with numbers and dates")
+        # Analyze clarity (1-10 scale)
+        if scores.clarity < 5:
+            coaching_candidates.append(("clarity", 
+                "Focus on specificity: Replace vague language with concrete numbers, dates, and commitments"))
+        elif scores.clarity >= 8:
+            coaching_candidates.append(("clarity_strength",
+                "Excellent clarity - maintain this level of specificity in future conversations"))
         
-        # Analyze confidence
-        if scores.confidence >= 80:
-            strengths.append("Confident, direct responses without deflection")
-        elif scores.confidence < 50:
-            weaknesses.append("Tendency to deflect or avoid direct questions")
-            recommendations.append("Face difficult questions head-on instead of changing topics")
+        # Analyze confidence (1-10 scale)
+        if scores.confidence < 5:
+            coaching_candidates.append(("confidence",
+                "Address questions directly: Avoid deflecting or changing topics when challenged"))
+        elif scores.confidence >= 8:
+            coaching_candidates.append(("confidence_strength",
+                "Strong confidence shown - keep facing difficult questions head-on"))
         
-        # Analyze commitments
-        if scores.commitment >= 70:
-            strengths.append("Strong concrete commitments made")
-        elif scores.commitment < 40:
-            weaknesses.append("Lack of specific commitments")
-            recommendations.append("Make concrete commitments with specific timelines and deliverables")
+        # Analyze commitments (1-10 scale)
+        if scores.commitment < 5:
+            coaching_candidates.append(("commitment",
+                "Make concrete commitments: Include specific timelines and measurable deliverables"))
+        elif scores.commitment >= 8:
+            coaching_candidates.append(("commitment_strength",
+                "Great commitment quality - continue providing specific, actionable promises"))
         
-        # Analyze adaptability
-        if scores.adaptability >= 80:
-            strengths.append("Maintained composure under pressure")
-        elif scores.adaptability < 50:
-            weaknesses.append("Performance degraded as pressure increased")
-            recommendations.append("Practice staying calm and clear when challenged")
+        # Analyze adaptability (1-10 scale)
+        if scores.adaptability < 5:
+            coaching_candidates.append(("adaptability",
+                "Improve under pressure: Practice maintaining performance when difficulty increases"))
+        
+        # Analyze composure (1-10 scale)
+        if scores.composure < 5:
+            coaching_candidates.append(("composure",
+                "Stay calm and collected: Take a breath before responding when feeling pressured"))
+        
+        # Analyze effectiveness (1-10 scale)
+        if scores.effectiveness < 5:
+            coaching_candidates.append(("effectiveness",
+                "Align responses with goals: Keep your objective in mind and steer toward it"))
+        
+        # Select top 3 coaching points prioritizing areas that need improvement
+        # Sort by category to prioritize weaknesses over strengths
+        coaching_candidates.sort(key=lambda x: (
+            0 if "strength" not in x[0] else 1,  # Weaknesses first
+            -scores.__dict__.get(x[0].replace("_strength", ""), 0)  # Lower scores first
+        ))
+        
+        coaching_points = [text for _, text in coaching_candidates[:3]]
+        
+        # Ensure we have exactly 3 coaching points
+        while len(coaching_points) < 3:
+            coaching_points.append("Continue practicing high-pressure conversations to build resilience")
         
         # Add key moments
         if metrics.get("vague_response_count", 0) > 0:
-            key_moments.append(f"Review moments with vague language ({metrics['vague_response_count']} instances)")
+            key_moments.append(f"Review {metrics['vague_response_count']} instances of vague language")
         
         if metrics.get("deflection_count", 0) > 0:
-            key_moments.append(f"Examine deflection patterns ({metrics['deflection_count']} instances)")
+            key_moments.append(f"Examine {metrics['deflection_count']} deflection patterns")
         
         if metrics.get("commitments_made", 0) > 0:
-            key_moments.append(f"Note successful commitments ({metrics['commitments_made']} made)")
+            key_moments.append(f"Note {metrics['commitments_made']} successful commitments made")
+        
+        if not key_moments:
+            key_moments.append("Review full transcript for improvement opportunities")
         
         return Feedback(
-            strengths=strengths,
-            weaknesses=weaknesses,
-            recommendations=recommendations,
+            coaching_points=coaching_points[:3],  # Ensure exactly 3
             key_moments=key_moments
         )
     
@@ -280,35 +334,27 @@ class EvaluatorAgent:
             evaluation: Evaluation results
             
         Returns:
-            Formatted text report
+            Formatted text report with 6 scores (1-10) and 3 coaching bullets
         """
         scores = evaluation["scores"]
         feedback = evaluation["feedback"]
         
         report = f"""
-PERFORMANCE EVALUATION
+PERFORMANCE SCORECARD
 =====================
 
-Overall Score: {scores['overall']:.1f}/100
+SCORES (1-10 scale):
+  Clarity:        {scores['clarity']:.1f}/10
+  Confidence:     {scores['confidence']:.1f}/10
+  Commitment:     {scores['commitment']:.1f}/10
+  Adaptability:   {scores['adaptability']:.1f}/10
+  Composure:      {scores['composure']:.1f}/10
+  Effectiveness:  {scores['effectiveness']:.1f}/10
 
-DIMENSION SCORES:
-- Clarity: {scores['clarity']:.1f}/100
-- Confidence: {scores['confidence']:.1f}/100
-- Commitment: {scores['commitment']:.1f}/100
-- Adaptability: {scores['adaptability']:.1f}/100
-
-STRENGTHS:
+COACHING POINTS:
 """
-        for strength in feedback["strengths"]:
-            report += f"  ✓ {strength}\n"
-        
-        report += "\nWEAKNESSES:\n"
-        for weakness in feedback["weaknesses"]:
-            report += f"  ✗ {weakness}\n"
-        
-        report += "\nRECOMMENDATIONS:\n"
-        for i, rec in enumerate(feedback["recommendations"], 1):
-            report += f"  {i}. {rec}\n"
+        for i, point in enumerate(feedback["coaching_points"], 1):
+            report += f"  {i}. {point}\n"
         
         if feedback["key_moments"]:
             report += "\nKEY MOMENTS TO REVIEW:\n"

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DifficultAI - Voice Training</title>
+    <script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .status.active {
+            display: block;
+        }
+        
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .controls {
+            display: none;
+            margin-top: 20px;
+        }
+        
+        .controls.active {
+            display: block;
+        }
+        
+        .audio-level {
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .audio-level-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.1s;
+        }
+        
+        .instructions {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .instructions h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .instructions ul {
+            margin-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+            color: #555;
+        }
+        
+        .note {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .note strong {
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DifficultAI</h1>
+        <p class="subtitle">High-Pressure Voice Training</p>
+        
+        <div class="instructions">
+            <h3>Quick Start Guide:</h3>
+            <ul>
+                <li><strong>Option 1:</strong> Use LiveKit Agents Playground at <a href="https://cloud.livekit.io/agents" target="_blank">cloud.livekit.io/agents</a></li>
+                <li><strong>Option 2:</strong> Deploy this web client with a backend that creates rooms and tokens</li>
+                <li>During session: Speak naturally, interrupt anytime (barge-in supported)</li>
+                <li>After session: Receive scorecard with 6 scores (1-10) + 3 coaching points</li>
+            </ul>
+        </div>
+        
+        <div class="note">
+            <strong>Note:</strong> This is a minimal reference client. For production use, you need to:
+            <ol style="margin-left: 20px; margin-top: 10px;">
+                <li>Set up a backend to create LiveKit rooms</li>
+                <li>Generate participant tokens with scenario metadata</li>
+                <li>Update LIVEKIT_URL and implement getToken() function</li>
+            </ol>
+            <p style="margin-top: 10px;">
+                <strong>Easiest way to test:</strong> Use LiveKit Cloud's Agents Playground with the scenario metadata JSON shown below.
+            </p>
+        </div>
+        
+        <form id="scenarioForm">
+            <div class="form-group">
+                <label for="persona">Scenario Type:</label>
+                <select id="persona" required>
+                    <option value="">-- Select Scenario --</option>
+                    <option value="ELITE_INTERVIEWER">Elite Interviewer</option>
+                    <option value="ANGRY_CUSTOMER">Angry Customer</option>
+                    <option value="TOUGH_NEGOTIATOR">Tough Negotiator</option>
+                    <option value="SKEPTICAL_INVESTOR">Skeptical Investor</option>
+                    <option value="DEMANDING_CLIENT">Demanding Client</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="company">Company:</label>
+                <input type="text" id="company" placeholder="e.g., TechCorp" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="role">Role:</label>
+                <input type="text" id="role" placeholder="e.g., Senior Software Engineer" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="stakes">Stakes:</label>
+                <textarea id="stakes" placeholder="What's at stake in this conversation?" required></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="userGoal">Your Goal:</label>
+                <textarea id="userGoal" placeholder="What are you trying to achieve?" required></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="difficulty">Difficulty (0-1):</label>
+                <input type="number" id="difficulty" min="0" max="1" step="0.1" value="0.5" required>
+                <small style="color: #666;">0 = easy, 0.5 = moderate, 1 = maximum pressure</small>
+            </div>
+            
+            <button type="button" id="copyBtn">Copy Scenario JSON</button>
+        </form>
+        
+        <div id="status" class="status"></div>
+        
+        <textarea id="jsonOutput" readonly style="margin-top: 20px; font-family: monospace; display: none; height: 200px;"></textarea>
+    </div>
+    
+    <script>
+        // Copy scenario JSON
+        document.getElementById('copyBtn').addEventListener('click', () => {
+            const scenario = {
+                persona_type: document.getElementById('persona').value,
+                company: document.getElementById('company').value,
+                role: document.getElementById('role').value,
+                stakes: document.getElementById('stakes').value,
+                user_goal: document.getElementById('userGoal').value,
+                difficulty: parseFloat(document.getElementById('difficulty').value)
+            };
+            
+            const jsonOutput = document.getElementById('jsonOutput');
+            const json = JSON.stringify(scenario, null, 2);
+            jsonOutput.value = json;
+            jsonOutput.style.display = 'block';
+            jsonOutput.select();
+            document.execCommand('copy');
+            
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = 'Scenario JSON copied to clipboard! Paste this into LiveKit Agents Playground or your room metadata.';
+            statusEl.className = 'status active connected';
+        });
+        
+        // Populate form with example
+        window.addEventListener('load', () => {
+            document.getElementById('persona').value = 'ELITE_INTERVIEWER';
+            document.getElementById('company').value = 'TechCorp';
+            document.getElementById('role').value = 'Senior Software Engineer';
+            document.getElementById('stakes').value = 'Final round interview for $250k position';
+            document.getElementById('userGoal').value = 'Demonstrate technical expertise and secure job offer';
+        });
+    </script>
+</body>
+</html>
