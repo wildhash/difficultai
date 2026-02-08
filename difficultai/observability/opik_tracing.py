@@ -235,7 +235,7 @@ class OpikTracer:
 
     def log_scorecard_feedback_scores(
         self,
-        scorecard: Dict[str, Any],
+        scorecard: Any,
         category_name: str = "scorecard",
     ) -> None:
         """Log numeric scorecard dimensions (expected 1-10 scale) as Opik feedback scores.
@@ -248,6 +248,14 @@ class OpikTracer:
             return
 
         try:
+            if not isinstance(scorecard, dict):
+                logger.warning(
+                    "Invalid scorecard shape for trace %s; expected dict, got %s",
+                    getattr(trace, "id", None),
+                    type(scorecard).__name__,
+                )
+                return
+
             scores = (scorecard or {}).get("scores") or {}
             if not isinstance(scores, dict) or not scores:
                 logger.warning(

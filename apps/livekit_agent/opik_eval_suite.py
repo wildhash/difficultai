@@ -317,8 +317,19 @@ def main() -> int:
         print(f"Using existing dataset '{dataset_name}' (items: {dataset.dataset_items_count})")
 
     def task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
-        metrics = dataset_item.get("metrics") or {}
-        scenario = dataset_item.get("scenario") or {}
+        try:
+            _validate_seed_item(dataset_item)
+        except ValueError as exc:
+            if strict_eval:
+                raise
+            return {
+                "scorecard": None,
+                "case_id": dataset_item.get("case_id"),
+                "error": str(exc),
+            }
+
+        metrics = dataset_item["metrics"]
+        scenario = dataset_item["scenario"]
         scorecard = evaluator.evaluate_conversation(metrics=metrics, scenario=scenario)
 
         if not isinstance(scorecard, dict):

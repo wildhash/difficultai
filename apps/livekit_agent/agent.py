@@ -165,12 +165,7 @@ class DifficultAIAgent:
             # Generate and send scorecard
             evaluation = await self._generate_scorecard()
 
-            if (
-                self.opik_tracer.enabled
-                and isinstance(evaluation, dict)
-                and isinstance((evaluation.get("scores") or {}), dict)
-                and evaluation.get("scores")
-            ):
+            if self.opik_tracer.enabled:
                 self.opik_tracer.log_scorecard_feedback_scores(evaluation)
             
             opik_output = {
