@@ -61,7 +61,34 @@ def _print_header(title: str) -> None:
 
 def _ensure_repo_on_path() -> None:
     root = _repo_root()
-    sys.path.insert(0, str(root))
+    root_str = str(root)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+
+_REQUIRED_METRICS_KEYS = {
+    "vague_response_count",
+    "deflection_count",
+    "commitments_made",
+    "total_exchanges",
+    "current_difficulty",
+    "scenario_difficulty",
+}
+
+_REQUIRED_SCENARIO_KEYS = {"persona_type", "company", "role", "difficulty"}
+
+
+def _validate_seed_item(item: Dict[str, Any]) -> None:
+    metrics = item.get("metrics") or {}
+    scenario = item.get("scenario") or {}
+
+    missing_metrics = _REQUIRED_METRICS_KEYS - set(metrics.keys())
+    missing_scenario = _REQUIRED_SCENARIO_KEYS - set(scenario.keys())
+    if missing_metrics or missing_scenario:
+        raise ValueError(
+            f"Invalid dataset item {item.get('case_id')!r}: missing metrics {sorted(missing_metrics)} "
+            f"or scenario {sorted(missing_scenario)}"
+        )
 
 
 def _seed_dataset_items() -> List[Dict[str, Any]]:
@@ -201,15 +228,34 @@ def main() -> int:
         description="Deterministic scorecard regression dataset for DifficultAI",
     )
 
-    # Insert seed cases if the dataset is empty (or count is unavailable).
-    if (dataset.dataset_items_count or 0) == 0:
-        items = _seed_dataset_items()
-        dataset.insert(items)
-        print(f"Seeded dataset '{dataset_name}' with {len(items)} items")
-    else:
-        print(f"Using existing dataset '{dataset_name}' (items: {dataset.dataset_items_count})")
+    seed_items = _seed_dataset_items()
+    for item in seed_items:
+        _validate_seed_item(item)
 
     evaluator = EvaluatorAgent()
+
+    # Ensure evaluator stays deterministic for the same input.
+    sample = seed_items[0]
+    first = evaluator.evaluate_conversation(
+        metrics=sample["metrics"],
+        scenario=sample["scenario"],
+    )
+    second = evaluator.evaluate_conversation(
+        metrics=sample["metrics"],
+        scenario=sample["scenario"],
+    )
+    if (first.get("scores") or {}) != (second.get("scores") or {}):
+        raise RuntimeError(
+            "EvaluatorAgent is non-deterministic for the same (metrics, scenario) input; "
+            "not suitable for regression eval suite"
+        )
+
+    # Insert seed cases if the dataset is empty (or count is unavailable).
+    if (dataset.dataset_items_count or 0) == 0:
+        dataset.insert(seed_items)
+        print(f"Seeded dataset '{dataset_name}' with {len(seed_items)} items")
+    else:
+        print(f"Using existing dataset '{dataset_name}' (items: {dataset.dataset_items_count})")
 
     def task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
         metrics = dataset_item.get("metrics") or {}
@@ -224,7 +270,10 @@ def main() -> int:
         def scorer(dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]):
             scores = (task_outputs.get("scorecard") or {}).get("scores") or {}
             if key not in scores:
-                raise KeyError(f"Missing scorecard dimension '{key}' in scores: {scores!r}")
+                raise KeyError(
+                    f"Missing scorecard dimension '{key}' for case_id={dataset_item.get('case_id')!r} "
+                    f"in scores: {scores!r}"
+                )
 
             try:
                 value = float(scores[key])
@@ -246,9 +295,14 @@ def main() -> int:
     ]
 
     sha = _git_sha()
+    environment = os.getenv("OPIK_EVAL_ENV", os.getenv("APP_ENV", "local"))
+    dataset_version = os.getenv("OPIK_EVAL_DATASET_VERSION", "v1")
     experiment_config: Dict[str, Any] = {
         "git_sha": sha,
         "eval_suite": "scorecard_regression",
+        "environment": environment,
+        "dataset_name": dataset_name,
+        "dataset_version": dataset_version,
     }
 
     result = opik.evaluate(

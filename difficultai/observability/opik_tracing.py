@@ -235,16 +235,23 @@ class OpikTracer:
         try:
             scores = (scorecard or {}).get("scores") or {}
             if not isinstance(scores, dict) or not scores:
+                logger.warning(
+                    "No scorecard scores available to log for trace %s; got: %r",
+                    getattr(trace, "id", None),
+                    type(scores).__name__,
+                )
                 return
 
             feedback_scores = []
             total = 0.0
             count = 0
+            skipped_keys = []
 
             for key, value in scores.items():
                 try:
                     f_value = float(value)
                 except (TypeError, ValueError):
+                    skipped_keys.append(key)
                     continue
 
                 feedback_scores.append(
@@ -271,6 +278,13 @@ class OpikTracer:
 
             if feedback_scores:
                 self.client.log_traces_feedback_scores(feedback_scores)
+
+            if skipped_keys:
+                logger.warning(
+                    "Skipped non-numeric scorecard dimensions %s for trace %s",
+                    skipped_keys,
+                    getattr(trace, "id", None),
+                )
 
         except Exception as e:
             logger.error(
