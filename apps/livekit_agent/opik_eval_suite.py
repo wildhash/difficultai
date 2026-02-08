@@ -37,14 +37,6 @@ def _repo_root() -> Path:
         if (parent / ".git").is_dir():
             return parent
 
-    # Fallback: assume repo root is two levels up from this file. Prefer failing fast
-    # if the result doesn't look like a repo checkout.
-    parents = list(path.parents)
-    if len(parents) > 2:
-        fallback = parents[2]
-        if (fallback / "requirements.txt").is_file() or (fallback / "Makefile").is_file():
-            return fallback
-
     if allow_guess:
         print(
             f"Warning: could not confidently locate repository root from {path}; "
@@ -266,15 +258,10 @@ def main() -> int:
     for item in seed_items:
         _validate_seed_item(item)
 
+    from difficultai.scorecard import SCORECARD_DIMENSIONS
+
     evaluator = EvaluatorAgent()
-    expected_dimensions = {
-        "clarity",
-        "confidence",
-        "commitment",
-        "adaptability",
-        "composure",
-        "effectiveness",
-    }
+    expected_dimensions = set(SCORECARD_DIMENSIONS)
 
     check_determinism = os.getenv("OPIK_EVAL_CHECK_DETERMINISM", "1").lower() not in (
         "0",
@@ -401,12 +388,8 @@ def main() -> int:
         return scorer
 
     scorers = [
-        _scorecard_dimension("scorecard.clarity", "clarity"),
-        _scorecard_dimension("scorecard.confidence", "confidence"),
-        _scorecard_dimension("scorecard.commitment", "commitment"),
-        _scorecard_dimension("scorecard.adaptability", "adaptability"),
-        _scorecard_dimension("scorecard.composure", "composure"),
-        _scorecard_dimension("scorecard.effectiveness", "effectiveness"),
+        _scorecard_dimension(f"scorecard.{dimension}", dimension)
+        for dimension in SCORECARD_DIMENSIONS
     ]
 
     sha = _git_sha()

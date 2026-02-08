@@ -26,6 +26,8 @@ from typing import Any, Callable, Dict, Optional
 from contextlib import contextmanager
 from functools import wraps
 
+from ..scorecard import SCORECARD_DIMENSIONS
+
 logger = logging.getLogger(__name__)
 
 _current_trace: ContextVar[Optional[Any]] = ContextVar("opik_current_trace", default=None)
@@ -256,14 +258,7 @@ class OpikTracer:
                 return
 
             feedback_scores = []
-            allowed_for_average = {
-                "clarity",
-                "confidence",
-                "commitment",
-                "adaptability",
-                "composure",
-                "effectiveness",
-            }
+            allowed_for_average = set(SCORECARD_DIMENSIONS)
             total = 0.0
             count = 0
             skipped_keys = []
