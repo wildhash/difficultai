@@ -32,6 +32,7 @@ def _repo_root() -> Path:
         return Path(env_root).resolve()
 
     path = Path(__file__).resolve()
+    allow_guess = os.getenv("OPIK_EVAL_ALLOW_ROOT_GUESS", "").lower() in ("1", "true", "yes")
     for parent in [path] + list(path.parents):
         if (parent / ".git").is_dir():
             return parent
@@ -39,28 +40,11 @@ def _repo_root() -> Path:
     # Fallback: assume repo root is two levels up from this file. Prefer failing fast
     # if the result doesn't look like a repo checkout.
     parents = list(path.parents)
-    if len(parents) <= 2:
-        allow_guess = os.getenv("OPIK_EVAL_ALLOW_ROOT_GUESS", "").lower() in (
-            "1",
-            "true",
-            "yes",
-        )
-        if allow_guess:
-            print(
-                f"Warning: could not locate repository root from {path}; "
-                "defaulting to current working directory. Set REPO_ROOT to override."
-            )
-            return Path.cwd()
+    if len(parents) > 2:
+        fallback = parents[2]
+        if (fallback / "requirements.txt").is_file() or (fallback / "Makefile").is_file():
+            return fallback
 
-        raise RuntimeError(
-            f"Could not locate repository root from {path}; set REPO_ROOT (or set OPIK_EVAL_ALLOW_ROOT_GUESS=1)."
-        )
-
-    fallback = parents[2]
-    if (fallback / "requirements.txt").is_file() or (fallback / "Makefile").is_file():
-        return fallback
-
-    allow_guess = os.getenv("OPIK_EVAL_ALLOW_ROOT_GUESS", "").lower() in ("1", "true", "yes")
     if allow_guess:
         print(
             f"Warning: could not confidently locate repository root from {path}; "
@@ -298,6 +282,8 @@ def main() -> int:
         "no",
     )
     if check_determinism:
+        import math
+
         for sample in seed_items:
             first = evaluator.evaluate_conversation(
                 metrics=sample["metrics"],
@@ -307,15 +293,34 @@ def main() -> int:
                 metrics=sample["metrics"],
                 scenario=sample["scenario"],
             )
-            if (first.get("scores") or {}) != (second.get("scores") or {}):
-                print(
-                    "ERROR: EvaluatorAgent produced different scores for identical input. "
-                    "Check for hidden randomness or time-based logic."
-                )
+            first_scores = first.get("scores") or {}
+            second_scores = second.get("scores") or {}
+
+            if set(first_scores.keys()) != set(second_scores.keys()):
                 raise RuntimeError(
-                    f"EvaluatorAgent is non-deterministic for case_id={sample.get('case_id')!r}; "
-                    "not suitable for regression eval suite"
+                    f"EvaluatorAgent returned different score keys for case_id={sample.get('case_id')!r}: "
+                    f"{sorted(first_scores.keys())} vs {sorted(second_scores.keys())}"
                 )
+
+            for key in first_scores.keys():
+                a = first_scores[key]
+                b = second_scores[key]
+
+                try:
+                    fa = float(a)
+                    fb = float(b)
+                except (TypeError, ValueError):
+                    if a != b:
+                        raise RuntimeError(
+                            f"Non-deterministic non-numeric score for '{key}' in case_id={sample.get('case_id')!r}: "
+                            f"{a!r} vs {b!r}"
+                        )
+                    continue
+
+                if not math.isclose(fa, fb, rel_tol=0.0, abs_tol=1e-6):
+                    raise RuntimeError(
+                        f"Non-deterministic score for '{key}' in case_id={sample.get('case_id')!r}: {fa!r} vs {fb!r}"
+                    )
 
     # Insert seed cases if the dataset is empty (or count is unavailable).
     if (dataset.dataset_items_count or 0) == 0:
