@@ -48,9 +48,11 @@ def _repo_root() -> Path:
     if (fallback / "requirements.txt").is_file() or (fallback / "Makefile").is_file():
         return fallback
 
-    raise RuntimeError(
-        f"Could not locate repository root from {path}; ensure .git is present or set REPO_ROOT."
+    print(
+        f"Warning: could not confidently locate repository root from {path}; "
+        "defaulting to current working directory. Set REPO_ROOT to override."
     )
+    return Path.cwd()
 
 
 def _git_sha() -> Optional[str]:
