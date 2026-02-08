@@ -59,6 +59,7 @@ from apps.livekit_agent.scenario_validator import (
     get_missing_fields,
     is_scenario_complete
 )
+from difficultai.observability import OpikTracer, get_tracer
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,7 @@ class DifficultAIAgent:
         self.architect = ArchitectAgent()
         self.evaluator = EvaluatorAgent()
         self.default_voice = os.getenv("DEFAULT_VOICE", "marin")
+        self.opik_tracer = get_tracer()  # Initialize Opik tracer
         
     async def entrypoint(self):
         """Main agent entrypoint with Realtime API and STT->LLM->TTS fallback."""
@@ -118,32 +120,60 @@ class DifficultAIAgent:
         participant = await self.ctx.wait_for_participant()
         logger.info(f"Participant joined: {participant.identity}")
         
-        # Try to use OpenAI Realtime API, fallback to STT->LLM->TTS if unavailable
+        # Start Opik session trace
+        if self.opik_tracer.enabled:
+            self.opik_tracer.start_session_trace(
+                livekit_room=self.ctx.room.name,
+                session_id=self.ctx.job.id if hasattr(self.ctx.job, 'id') else "unknown",
+                participant_identity=participant.identity,
+                scenario=self.session.scenario,
+            )
+        
         try:
-            logger.info("Attempting to use OpenAI Realtime API...")
-            assistant = await self._create_realtime_assistant()
-            logger.info("✓ Using OpenAI Realtime API (voice-to-voice)")
+            # Try to use OpenAI Realtime API, fallback to STT->LLM->TTS if unavailable
+            try:
+                logger.info("Attempting to use OpenAI Realtime API...")
+                assistant = await self._create_realtime_assistant()
+                logger.info("✓ Using OpenAI Realtime API (voice-to-voice)")
+            except Exception as e:
+                logger.warning(f"Realtime API unavailable ({e}), falling back to STT->LLM->TTS")
+                assistant = await self._create_fallback_assistant()
+                logger.info("✓ Using STT->LLM->TTS pipeline")
+            
+            # Set up event handlers
+            assistant.on("user_speech_committed", self._on_user_speech)
+            assistant.on("agent_speech_committed", self._on_agent_speech)
+            assistant.on("user_started_speaking", self._on_user_started_speaking)
+            
+            # Start the assistant
+            assistant.start(self.ctx.room, participant)
+            
+            # Initial greeting
+            await self._send_initial_message(assistant)
+            
+            # Wait for session to end
+            await assistant.wait_for_completion()
+            
+            # Generate and send scorecard
+            evaluation = await self._generate_scorecard()
+            
+            # End Opik trace with scorecard output
+            if self.opik_tracer.enabled:
+                self.opik_tracer.end_session_trace(output={
+                    "scorecard": evaluation,
+                    "transcript_length": len(self.session.transcript),
+                })
+                
         except Exception as e:
-            logger.warning(f"Realtime API unavailable ({e}), falling back to STT->LLM->TTS")
-            assistant = await self._create_fallback_assistant()
-            logger.info("✓ Using STT->LLM->TTS pipeline")
-        
-        # Set up event handlers
-        assistant.on("user_speech_committed", self._on_user_speech)
-        assistant.on("agent_speech_committed", self._on_agent_speech)
-        assistant.on("user_started_speaking", self._on_user_started_speaking)
-        
-        # Start the assistant
-        assistant.start(self.ctx.room, participant)
-        
-        # Initial greeting
-        await self._send_initial_message(assistant)
-        
-        # Wait for session to end
-        await assistant.wait_for_completion()
-        
-        # Generate and send scorecard
-        await self._generate_scorecard()
+            # Log error to Opik
+            if self.opik_tracer.enabled:
+                self.opik_tracer.log_error(e, context={
+                    "room": self.ctx.room.name,
+                    "stage": "entrypoint",
+                })
+            
+            # Re-raise to let LiveKit handle it
+            raise
     
     async def _create_realtime_assistant(self):
         """Create assistant using OpenAI Realtime API."""
