@@ -27,6 +27,15 @@ from dotenv import load_dotenv
 
 
 def _repo_root() -> Path:
+    env_root = os.getenv("REPO_ROOT")
+    if env_root:
+        return Path(env_root).resolve()
+
+    path = Path(__file__).resolve()
+    for parent in [path] + list(path.parents):
+        if (parent / ".git").is_dir():
+            return parent
+
     return Path(__file__).resolve().parents[2]
 
 
@@ -245,6 +254,10 @@ def main() -> int:
         scenario=sample["scenario"],
     )
     if (first.get("scores") or {}) != (second.get("scores") or {}):
+        print(
+            "ERROR: EvaluatorAgent produced different scores for identical input. "
+            "Check for hidden randomness or time-based logic."
+        )
         raise RuntimeError(
             "EvaluatorAgent is non-deterministic for the same (metrics, scenario) input; "
             "not suitable for regression eval suite"
