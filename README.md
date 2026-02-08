@@ -70,7 +70,19 @@ difficultai/
 │   ├── adversary.py          # Live conversational agent
 │   └── evaluator.py          # Scoring + feedback
 ├── apps/                     
-│   └── livekit_agent/        # LiveKit agent runtime (not a background worker)
+│   ├── livekit_agent/        # LiveKit agent runtime
+│   │   ├── agent.py          # Main agent entrypoint
+│   │   ├── opik_smoke_test.py # Opik tracing validation
+│   │   └── smoke_test.py     # Agent smoke test
+│   └── web/                  
+│       ├── demo/             # React web application
+│       │   ├── src/          # React components
+│       │   └── README.md     # Web app documentation
+│       └── index.html        # Simple scenario builder
+├── difficultai/
+│   └── observability/        # Observability and tracing
+│       ├── opik_tracing.py   # Opik integration
+│       └── __init__.py
 ├── docs/
 │   └── scenario_contract.md  # Scenario schema specification
 ├── difficult_ai.py           # Core adversarial agent implementation
@@ -210,6 +222,136 @@ The smoke test verifies:
 - ✓ Scenario validation works
 - ✓ LiveKit server is accessible
 - ✓ Agent components are functional
+
+### Observability with Opik
+
+DifficultAI includes production-grade observability using [Opik](https://www.comet.com/opik), providing complete tracing for all sessions, LLM calls, and errors.
+
+#### What Gets Traced
+
+**Session-level traces:**
+- LiveKit room name
+- Session ID
+- Participant identity
+- Scenario configuration (persona, company, role, difficulty)
+- Complete conversation transcript
+- Final scorecard and evaluation
+
+**Span-level traces:**
+- STT (Speech-to-Text) operations
+- LLM (Language Model) calls with prompts and responses
+- TTS (Text-to-Speech) operations
+- Tool calls (if any)
+- Errors and exceptions
+
+#### Quick Setup
+
+1. **Get Opik API Key** (optional - Opik works without it too):
+   - Sign up at [https://www.comet.com/opik](https://www.comet.com/opik)
+   - Get your API key from the dashboard
+
+2. **Configure Opik in `.env`**:
+   ```bash
+   # For Opik Cloud
+   OPIK_API_KEY=your_opik_api_key_here
+   OPIK_PROJECT=difficultai
+   OPIK_WORKSPACE=default
+   
+   # For self-hosted Opik
+   OPIK_URL_OVERRIDE=http://localhost:5000
+   
+   # To disable Opik
+   OPIK_DISABLED=1
+   ```
+
+3. **Run Opik smoke test**:
+   ```bash
+   make opik-smoke-test
+   ```
+   
+   This validates:
+   - ✓ Opik module imports correctly
+   - ✓ Configuration is valid
+   - ✓ Session traces are created
+   - ✓ LLM/STT/TTS spans are working
+   - ✓ Error logging is functional
+
+4. **Run your agent** - Opik traces automatically:
+   ```bash
+   make dev
+   ```
+
+5. **View traces in Opik**:
+   - Go to [https://www.comet.com/opik](https://www.comet.com/opik)
+   - Navigate to your project
+   - View session traces with complete metadata
+
+#### Opik Features
+
+- **Zero-code integration**: Automatic tracing with OpenAI SDK
+- **Kill switch**: Set `OPIK_DISABLED=1` to disable without code changes
+- **Self-hosted support**: Use `OPIK_URL_OVERRIDE` for your own instance
+- **Rich metadata**: Every trace includes scenario, persona, difficulty
+- **Performance tracking**: Duration metrics for all operations
+- **Error tracking**: Automatic error logging with context
+
+See [difficultai/observability/README.md](difficultai/observability/README.md) for advanced configuration.
+
+### Web Demo Application
+
+DifficultAI includes a React-based web application for easy voice interaction with the agent.
+
+#### Features
+
+- 🎙️ **Voice-to-Voice**: Real-time audio communication with the agent
+- 📝 **Live Transcripts**: See conversation history as you speak
+- 🎯 **Scenario Builder**: Configure training scenarios with different personas
+- 🔄 **Barge-in Support**: Interrupt the agent anytime
+- 📋 **Quick Copy**: Export scenario JSON for LiveKit Playground
+
+#### Quick Start
+
+1. **Install dependencies**:
+   ```bash
+   cd apps/web/demo
+   npm install
+   ```
+
+2. **Start the dev server**:
+   ```bash
+   npm run dev
+   ```
+   
+   The app will be available at `http://localhost:3000`.
+
+3. **Use with LiveKit Playground** (easiest):
+   - Open `http://localhost:3000`
+   - Configure your scenario
+   - Click "Copy Scenario JSON"
+   - Go to [LiveKit Agents Playground](https://cloud.livekit.io/agents)
+   - Paste JSON as room metadata
+   - Start session and begin speaking
+
+4. **Or connect directly** (requires token):
+   - Generate a LiveKit access token (see [apps/web/demo/README.md](apps/web/demo/README.md))
+   - Enter LiveKit URL, room name, and token
+   - Click "Connect & Start Session"
+   - Start speaking
+
+#### Production Deployment
+
+For production use, you need:
+1. Backend service to create rooms and generate tokens
+2. Environment configuration for LiveKit URL
+3. (Optional) Session recording and scorecard retrieval
+
+See [apps/web/demo/README.md](apps/web/demo/README.md) for complete deployment guide.
+
+#### Technology Stack
+
+- React 18 + Vite
+- LiveKit Client SDK
+- Modern CSS (no frameworks)
 
 #### Architecture: Voice-to-Voice with Realtime API + Fallback
 

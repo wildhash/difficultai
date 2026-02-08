@@ -1,17 +1,19 @@
-.PHONY: dev test smoke-test install clean help
+.PHONY: dev test smoke-test opik-smoke-test install clean help
 
 # Default target
 help:
 	@echo "DifficultAI LiveKit Agent - Available Commands:"
 	@echo ""
-	@echo "  make dev         - Start the LiveKit agent in development mode"
-	@echo "  make smoke-test  - Run smoke test (joins room, prints transcripts)"
-	@echo "  make test        - Run all tests"
-	@echo "  make install     - Install dependencies"
-	@echo "  make clean       - Clean up temporary files"
+	@echo "  make dev              - Start the LiveKit agent in development mode"
+	@echo "  make smoke-test       - Run smoke test (joins room, prints transcripts)"
+	@echo "  make opik-smoke-test  - Run Opik tracing smoke test (validate observability)"
+	@echo "  make test             - Run all tests"
+	@echo "  make install          - Install dependencies"
+	@echo "  make clean            - Clean up temporary files"
 	@echo ""
 	@echo "Requirements:"
 	@echo "  - Set up .env file with LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, OPENAI_API_KEY"
+	@echo "  - Optional: Set OPIK_API_KEY for observability (or OPIK_DISABLED=1 to disable)"
 	@echo "  - Install dependencies: make install"
 	@echo ""
 
@@ -24,6 +26,11 @@ dev:
 smoke-test:
 	@echo "Running smoke test..."
 	python apps/livekit_agent/smoke_test.py
+
+# Run Opik tracing smoke test
+opik-smoke-test:
+	@echo "Running Opik tracing smoke test..."
+	python apps/livekit_agent/opik_smoke_test.py
 
 # Run all tests
 test:
