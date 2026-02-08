@@ -263,10 +263,10 @@ def main() -> int:
     evaluator = EvaluatorAgent()
     expected_dimensions = set(SCORECARD_DIMENSIONS)
 
-    check_determinism = os.getenv("OPIK_EVAL_CHECK_DETERMINISM", "1").lower() not in (
-        "0",
-        "false",
-        "no",
+    check_determinism = os.getenv("OPIK_EVAL_CHECK_DETERMINISM", "0").lower() in (
+        "1",
+        "true",
+        "yes",
     )
     if check_determinism:
         import math
@@ -387,7 +387,17 @@ def main() -> int:
 
         return scorer
 
-    scorers = [
+    def _task_success_scorer(dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]):
+        ok = task_outputs.get("scorecard") is not None
+        reason = None if ok else (task_outputs.get("error") or "Task returned no scorecard")
+        return ScoreResult(
+            name="task_success",
+            value=1.0 if ok else 0.0,
+            reason=reason,
+            scoring_failed=not ok,
+        )
+
+    scorers = [_task_success_scorer] + [
         _scorecard_dimension(f"scorecard.{dimension}", dimension)
         for dimension in SCORECARD_DIMENSIONS
     ]

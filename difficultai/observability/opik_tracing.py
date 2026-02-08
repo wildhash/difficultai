@@ -258,12 +258,16 @@ class OpikTracer:
                 return
 
             feedback_scores = []
-            allowed_for_average = set(SCORECARD_DIMENSIONS)
             total = 0.0
             count = 0
             skipped_keys = []
 
-            for key, value in scores.items():
+            for key in SCORECARD_DIMENSIONS:
+                if key not in scores:
+                    skipped_keys.append(key)
+                    continue
+
+                value = scores[key]
                 try:
                     f_value = float(value)
                 except (TypeError, ValueError):
@@ -279,9 +283,8 @@ class OpikTracer:
                     }
                 )
 
-                if key in allowed_for_average:
-                    total += f_value
-                    count += 1
+                total += f_value
+                count += 1
 
             if count > 0:
                 feedback_scores.append(
