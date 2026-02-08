@@ -333,7 +333,7 @@ function App() {
       )}
       
       <div className="footer">
-        <p>DifficultAI - High-Pressure Voice Training • <a href="https://github.com/wildhash/difficultai" target="_blank">GitHub</a></p>
+        <p>DifficultAI - High-Pressure Voice Training • <a href="https://github.com/wildhash/difficultai" target="_blank" rel="noopener noreferrer">GitHub</a></p>
       </div>
     </div>
   )
