@@ -47,6 +47,27 @@ def get_opik_config() -> Dict[str, Any]:
     }
 
 
+def configure_opik(config: Optional[Dict[str, Any]] = None) -> None:
+    """Configure Opik SDK using the provided config (or environment defaults)."""
+
+    cfg = config or get_opik_config()
+    try:
+        import opik
+    except Exception:
+        return
+
+    configure_kwargs: Dict[str, Any] = {}
+    if cfg.get("api_key"):
+        configure_kwargs["api_key"] = cfg["api_key"]
+    if cfg.get("workspace"):
+        configure_kwargs["workspace"] = cfg["workspace"]
+    if cfg.get("url_override"):
+        configure_kwargs["url"] = cfg["url_override"]
+
+    if configure_kwargs:
+        opik.configure(**configure_kwargs)
+
+
 class OpikTracer:
     """
     Centralized Opik tracing manager for DifficultAI.
@@ -76,17 +97,8 @@ class OpikTracer:
         """Initialize Opik client and OpenAI tracking."""
         try:
             import opik
-            
-            configure_kwargs: Dict[str, Any] = {}
-            if self.config["api_key"]:
-                configure_kwargs["api_key"] = self.config["api_key"]
-            if self.config.get("workspace"):
-                configure_kwargs["workspace"] = self.config["workspace"]
-            if self.config["url_override"]:
-                configure_kwargs["url"] = self.config["url_override"]
 
-            if configure_kwargs:
-                opik.configure(**configure_kwargs)
+            configure_opik(self.config)
 
             self.client = opik.Opik(
                 project_name=self.config["project_name"],
@@ -267,11 +279,17 @@ class OpikTracer:
                 count += 1
 
             if count > 0:
+                overall_value = None
+                try:
+                    overall_value = float(scores.get("effectiveness"))
+                except (TypeError, ValueError):
+                    overall_value = None
+
                 feedback_scores.append(
                     {
                         "id": trace.id,
                         "name": f"{category_name}.overall",
-                        "value": total / count,
+                        "value": overall_value if overall_value is not None else (total / count),
                         "category_name": category_name,
                     }
                 )

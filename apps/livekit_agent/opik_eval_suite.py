@@ -36,7 +36,9 @@ def _repo_root() -> Path:
         if (parent / ".git").is_dir():
             return parent
 
-    return Path(__file__).resolve().parents[2]
+    raise RuntimeError(
+        f"Could not locate repository root from {path}; ensure .git is present or set REPO_ROOT."
+    )
 
 
 def _git_sha() -> Optional[str]:
@@ -50,16 +52,6 @@ def _git_sha() -> Optional[str]:
         return sha
     except Exception:
         return None
-
-
-def _get_opik_config() -> Dict[str, Any]:
-    return {
-        "api_key": os.getenv("OPIK_API_KEY"),
-        "url_override": os.getenv("OPIK_URL_OVERRIDE"),
-        "project_name": os.getenv("OPIK_PROJECT", "difficultai"),
-        "workspace": os.getenv("OPIK_WORKSPACE", "default"),
-        "disabled": os.getenv("OPIK_DISABLED", "").lower() in ("1", "true", "yes"),
-    }
 
 
 def _print_header(title: str) -> None:
@@ -200,12 +192,18 @@ def main() -> int:
     _ensure_repo_on_path()
     load_dotenv()
 
-    config = _get_opik_config()
-    if config["disabled"]:
+    from difficultai.observability.opik_tracing import (
+        configure_opik,
+        get_opik_config,
+        is_opik_enabled,
+    )
+
+    if not is_opik_enabled():
         print("Opik is disabled via OPIK_DISABLED; nothing to do.")
         return 0
 
-    if not config["api_key"] and not config["url_override"]:
+    config = get_opik_config()
+    if not config.get("api_key") and not config.get("url_override"):
         print("Missing Opik credentials: set OPIK_API_KEY or OPIK_URL_OVERRIDE.")
         return 2
 
@@ -220,15 +218,7 @@ def main() -> int:
     if config["url_override"]:
         print(f"URL Override: {config['url_override']}")
 
-    configure_kwargs: Dict[str, Any] = {}
-    if config["api_key"]:
-        configure_kwargs["api_key"] = config["api_key"]
-    if config["workspace"]:
-        configure_kwargs["workspace"] = config["workspace"]
-    if config["url_override"]:
-        configure_kwargs["url"] = config["url_override"]
-    if configure_kwargs:
-        opik.configure(**configure_kwargs)
+    configure_opik(config)
 
     client = opik.Opik(project_name=config["project_name"], workspace=config["workspace"])
     dataset_name = os.getenv("OPIK_EVAL_DATASET", "difficultai-scorecard-regression")
@@ -243,25 +233,24 @@ def main() -> int:
 
     evaluator = EvaluatorAgent()
 
-    # Ensure evaluator stays deterministic for the same input.
-    sample = seed_items[0]
-    first = evaluator.evaluate_conversation(
-        metrics=sample["metrics"],
-        scenario=sample["scenario"],
-    )
-    second = evaluator.evaluate_conversation(
-        metrics=sample["metrics"],
-        scenario=sample["scenario"],
-    )
-    if (first.get("scores") or {}) != (second.get("scores") or {}):
-        print(
-            "ERROR: EvaluatorAgent produced different scores for identical input. "
-            "Check for hidden randomness or time-based logic."
+    for sample in seed_items:
+        first = evaluator.evaluate_conversation(
+            metrics=sample["metrics"],
+            scenario=sample["scenario"],
         )
-        raise RuntimeError(
-            "EvaluatorAgent is non-deterministic for the same (metrics, scenario) input; "
-            "not suitable for regression eval suite"
+        second = evaluator.evaluate_conversation(
+            metrics=sample["metrics"],
+            scenario=sample["scenario"],
         )
+        if (first.get("scores") or {}) != (second.get("scores") or {}):
+            print(
+                "ERROR: EvaluatorAgent produced different scores for identical input. "
+                "Check for hidden randomness or time-based logic."
+            )
+            raise RuntimeError(
+                f"EvaluatorAgent is non-deterministic for case_id={sample.get('case_id')!r}; "
+                "not suitable for regression eval suite"
+            )
 
     # Insert seed cases if the dataset is empty (or count is unavailable).
     if (dataset.dataset_items_count or 0) == 0:
@@ -282,18 +271,26 @@ def main() -> int:
     def _scorecard_dimension(name: str, key: str):
         def scorer(dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]):
             scores = (task_outputs.get("scorecard") or {}).get("scores") or {}
+            strict = os.getenv("OPIK_EVAL_STRICT", "1").lower() not in ("0", "false", "no")
             if key not in scores:
-                raise KeyError(
+                reason = (
                     f"Missing scorecard dimension '{key}' for case_id={dataset_item.get('case_id')!r} "
                     f"in scores: {scores!r}"
                 )
+                if strict:
+                    raise KeyError(reason)
+                return ScoreResult(name=name, value=0.0, reason=reason, scoring_failed=True)
 
             try:
                 value = float(scores[key])
             except (TypeError, ValueError) as exc:
-                raise ValueError(
-                    f"Non-numeric value for scorecard dimension '{key}': {scores[key]!r}"
-                ) from exc
+                reason = (
+                    f"Non-numeric value for scorecard dimension '{key}' for case_id={dataset_item.get('case_id')!r}: "
+                    f"{scores[key]!r}"
+                )
+                if strict:
+                    raise ValueError(reason) from exc
+                return ScoreResult(name=name, value=0.0, reason=reason, scoring_failed=True)
             return ScoreResult(name=name, value=value)
 
         return scorer
