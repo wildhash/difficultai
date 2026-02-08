@@ -47,6 +47,10 @@
   - Kill switch: `OPIK_DISABLED=1`
   - Cloud and self-hosted support
 
+- [x] **Evaluation & experiments**:
+  - Scorecard dimensions logged as Opik feedback scores on each session trace
+  - Regression eval suite using Opik datasets + experiments: `make opik-eval-suite`
+
 ### ✅ 3. Web Demo Application
 
 - [x] React + Vite web application
@@ -83,6 +87,7 @@
   - `make dev` - Start agent
   - `make smoke-test` - Validate agent setup
   - `make opik-smoke-test` - Validate Opik tracing
+  - `make opik-eval-suite` - Run Opik scorecard evals (dataset + experiment)
   - `make install` - Install dependencies
   - `make clean` - Clean up temporary files
 

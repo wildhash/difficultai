@@ -188,7 +188,12 @@ class TestEvaluatorAgent(unittest.TestCase):
         
         self.assertIn("scores", evaluation)
         self.assertIn("feedback", evaluation)
-        self.assertIn("overall", evaluation["scores"])
+        self.assertIn("clarity", evaluation["scores"])
+        self.assertIn("confidence", evaluation["scores"])
+        self.assertIn("commitment", evaluation["scores"])
+        self.assertIn("adaptability", evaluation["scores"])
+        self.assertIn("composure", evaluation["scores"])
+        self.assertIn("effectiveness", evaluation["scores"])
     
     def test_score_calculations(self):
         """Test that scores are calculated correctly."""
@@ -204,10 +209,10 @@ class TestEvaluatorAgent(unittest.TestCase):
         evaluation = self.evaluator.evaluate_conversation(metrics)
         scores = evaluation["scores"]
         
-        # High quality conversation should have high scores
-        self.assertGreater(scores["clarity"], 80)
-        self.assertGreater(scores["confidence"], 80)
-        self.assertGreater(scores["overall"], 70)
+        # High quality conversation should have high scores (1-10 scale)
+        self.assertGreater(scores["clarity"], 8)
+        self.assertGreater(scores["confidence"], 8)
+        self.assertGreater(scores["effectiveness"], 7)
     
     def test_get_summary_report(self):
         """Test summary report generation."""
@@ -223,10 +228,9 @@ class TestEvaluatorAgent(unittest.TestCase):
         evaluation = self.evaluator.evaluate_conversation(metrics)
         report = self.evaluator.get_summary_report(evaluation)
         
-        self.assertIn("PERFORMANCE EVALUATION", report)
-        self.assertIn("Overall Score", report)
-        self.assertIn("STRENGTHS", report)
-        self.assertIn("WEAKNESSES", report)
+        self.assertIn("PERFORMANCE SCORECARD", report)
+        self.assertIn("SCORES (1-10 scale)", report)
+        self.assertIn("COACHING POINTS", report)
 
 
 if __name__ == '__main__':

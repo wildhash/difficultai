@@ -214,6 +214,63 @@ class OpikTracer:
             logger.error(f"Failed to end session trace: {e}")
         finally:
             _current_trace.set(None)
+
+    def log_scorecard_feedback_scores(
+        self,
+        scorecard: Dict[str, Any],
+        category_name: str = "scorecard",
+    ) -> None:
+        """Log scorecard dimensions as Opik feedback scores for the current trace.
+
+        This makes scorecard results easy to aggregate and compare in Opik.
+        """
+
+        trace = _current_trace.get()
+        if not self.enabled or not self.client or not trace:
+            return
+
+        try:
+            scores = (scorecard or {}).get("scores") or {}
+            if not isinstance(scores, dict) or not scores:
+                return
+
+            feedback_scores = []
+            total = 0.0
+            count = 0
+
+            for key, value in scores.items():
+                try:
+                    f_value = float(value)
+                except (TypeError, ValueError):
+                    continue
+
+                feedback_scores.append(
+                    {
+                        "id": trace.id,
+                        "name": f"{category_name}.{key}",
+                        "value": f_value,
+                        "category_name": category_name,
+                    }
+                )
+
+                total += f_value
+                count += 1
+
+            if count > 0:
+                feedback_scores.append(
+                    {
+                        "id": trace.id,
+                        "name": f"{category_name}.overall",
+                        "value": total / count,
+                        "category_name": category_name,
+                    }
+                )
+
+            if feedback_scores:
+                self.client.log_traces_feedback_scores(feedback_scores)
+
+        except Exception as e:
+            logger.error(f"Failed to log scorecard feedback scores: {e}")
     
     @contextmanager
     def trace_llm_span(
