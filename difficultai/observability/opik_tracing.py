@@ -26,6 +26,8 @@ from typing import Any, Callable, Dict, Optional
 from contextlib import contextmanager
 from functools import wraps
 
+from ..scorecard import SCORECARD_DIMENSIONS
+
 logger = logging.getLogger(__name__)
 
 _current_trace: ContextVar[Optional[Any]] = ContextVar("opik_current_trace", default=None)
@@ -45,6 +47,28 @@ def get_opik_config() -> Dict[str, Any]:
         "project_name": os.getenv("OPIK_PROJECT", "difficultai"),
         "workspace": os.getenv("OPIK_WORKSPACE", "default"),
     }
+
+
+def configure_opik(config: Optional[Dict[str, Any]] = None) -> None:
+    """Configure Opik SDK using the provided config (or environment defaults)."""
+
+    cfg = config or get_opik_config()
+    try:
+        import opik
+    except Exception as exc:
+        logger.warning("Opik SDK is not available; observability is disabled: %s", exc)
+        return
+
+    configure_kwargs: Dict[str, Any] = {}
+    if cfg.get("api_key"):
+        configure_kwargs["api_key"] = cfg["api_key"]
+    if cfg.get("workspace"):
+        configure_kwargs["workspace"] = cfg["workspace"]
+    if cfg.get("url_override"):
+        configure_kwargs["url"] = cfg["url_override"]
+
+    if configure_kwargs:
+        opik.configure(**configure_kwargs)
 
 
 class OpikTracer:
@@ -76,19 +100,13 @@ class OpikTracer:
         """Initialize Opik client and OpenAI tracking."""
         try:
             import opik
-            
-            configure_kwargs: Dict[str, Any] = {}
-            if self.config["api_key"]:
-                configure_kwargs["api_key"] = self.config["api_key"]
-            if self.config.get("workspace"):
-                configure_kwargs["workspace"] = self.config["workspace"]
-            if self.config["url_override"]:
-                configure_kwargs["url"] = self.config["url_override"]
 
-            if configure_kwargs:
-                opik.configure(**configure_kwargs)
+            configure_opik(self.config)
 
-            self.client = opik.Opik(project_name=self.config["project_name"])
+            self.client = opik.Opik(
+                project_name=self.config["project_name"],
+                workspace=self.config.get("workspace"),
+            )
             
             # Enable OpenAI tracking if OpenAI is available
             try:
@@ -214,6 +232,95 @@ class OpikTracer:
             logger.error(f"Failed to end session trace: {e}")
         finally:
             _current_trace.set(None)
+
+    def log_scorecard_feedback_scores(
+        self,
+        scorecard: Any,
+        category_name: str = "scorecard",
+    ) -> None:
+        """Log numeric scorecard dimensions (expected 1-10 scale) as Opik feedback scores.
+
+        This makes scorecard results easy to aggregate and compare in Opik.
+        """
+
+        trace = _current_trace.get()
+        if not self.enabled or not self.client or not trace:
+            return
+
+        try:
+            if not isinstance(scorecard, dict):
+                logger.warning(
+                    "Invalid scorecard shape for trace %s; expected dict, got %s",
+                    getattr(trace, "id", None),
+                    type(scorecard).__name__,
+                )
+                return
+
+            scores = (scorecard or {}).get("scores") or {}
+            if not isinstance(scores, dict) or not scores:
+                logger.warning(
+                    "No scorecard scores available to log for trace %s; got: %r",
+                    getattr(trace, "id", None),
+                    type(scores).__name__,
+                )
+                return
+
+            feedback_scores = []
+            total = 0.0
+            count = 0
+            skipped_keys = []
+
+            for key in SCORECARD_DIMENSIONS:
+                if key not in scores:
+                    skipped_keys.append(key)
+                    continue
+
+                value = scores[key]
+                try:
+                    f_value = float(value)
+                except (TypeError, ValueError):
+                    skipped_keys.append(key)
+                    continue
+
+                feedback_scores.append(
+                    {
+                        "id": trace.id,
+                        "name": f"{category_name}.{key}",
+                        "value": f_value,
+                        "category_name": category_name,
+                    }
+                )
+
+                total += f_value
+                count += 1
+
+            if count > 0:
+                feedback_scores.append(
+                    {
+                        "id": trace.id,
+                        "name": f"{category_name}.average",
+                        "value": total / count,
+                        "category_name": category_name,
+                    }
+                )
+
+            if feedback_scores:
+                self.client.log_traces_feedback_scores(feedback_scores)
+
+            if skipped_keys:
+                logger.warning(
+                    "Skipped non-numeric scorecard dimensions %s for trace %s",
+                    skipped_keys,
+                    getattr(trace, "id", None),
+                )
+
+        except Exception as e:
+            logger.error(
+                "Failed to log scorecard feedback scores for trace %s with keys %s: %s",
+                getattr(trace, "id", None),
+                list(((scorecard or {}).get("scores") or {}).keys()),
+                e,
+            )
     
     @contextmanager
     def trace_llm_span(
