@@ -40,19 +40,37 @@ def _repo_root() -> Path:
     # if the result doesn't look like a repo checkout.
     parents = list(path.parents)
     if len(parents) <= 2:
+        allow_guess = os.getenv("OPIK_EVAL_ALLOW_ROOT_GUESS", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if allow_guess:
+            print(
+                f"Warning: could not locate repository root from {path}; "
+                "defaulting to current working directory. Set REPO_ROOT to override."
+            )
+            return Path.cwd()
+
         raise RuntimeError(
-            f"Could not locate repository root from {path}; ensure .git is present or set REPO_ROOT."
+            f"Could not locate repository root from {path}; set REPO_ROOT (or set OPIK_EVAL_ALLOW_ROOT_GUESS=1)."
         )
 
     fallback = parents[2]
     if (fallback / "requirements.txt").is_file() or (fallback / "Makefile").is_file():
         return fallback
 
-    print(
-        f"Warning: could not confidently locate repository root from {path}; "
-        "defaulting to current working directory. Set REPO_ROOT to override."
+    allow_guess = os.getenv("OPIK_EVAL_ALLOW_ROOT_GUESS", "").lower() in ("1", "true", "yes")
+    if allow_guess:
+        print(
+            f"Warning: could not confidently locate repository root from {path}; "
+            "defaulting to current working directory. Set REPO_ROOT to override."
+        )
+        return Path.cwd()
+
+    raise RuntimeError(
+        f"Could not locate repository root from {path}; set REPO_ROOT (or set OPIK_EVAL_ALLOW_ROOT_GUESS=1)."
     )
-    return Path.cwd()
 
 
 def _git_sha() -> Optional[str]:
@@ -265,6 +283,14 @@ def main() -> int:
         _validate_seed_item(item)
 
     evaluator = EvaluatorAgent()
+    expected_dimensions = {
+        "clarity",
+        "confidence",
+        "commitment",
+        "adaptability",
+        "composure",
+        "effectiveness",
+    }
 
     check_determinism = os.getenv("OPIK_EVAL_CHECK_DETERMINISM", "1").lower() not in (
         "0",
@@ -303,7 +329,7 @@ def main() -> int:
         scenario = dataset_item.get("scenario") or {}
         scorecard = evaluator.evaluate_conversation(metrics=metrics, scenario=scenario)
 
-        if not isinstance(scorecard, dict) or "scores" not in (scorecard or {}):
+        if not isinstance(scorecard, dict):
             reason = (
                 f"EvaluatorAgent returned invalid scorecard for case_id={dataset_item.get('case_id')!r}: {scorecard!r}"
             )
@@ -314,6 +340,26 @@ def main() -> int:
                 "case_id": dataset_item.get("case_id"),
                 "error": reason,
             }
+
+        scores = scorecard.get("scores")
+        if not isinstance(scores, dict):
+            reason = (
+                f"EvaluatorAgent returned invalid scorecard for case_id={dataset_item.get('case_id')!r}: {scorecard!r}"
+            )
+            if strict_eval:
+                raise RuntimeError(reason)
+            return {
+                "scorecard": None,
+                "case_id": dataset_item.get("case_id"),
+                "error": reason,
+            }
+
+        if strict_eval:
+            missing_dimensions = expected_dimensions - set(scores.keys())
+            if missing_dimensions:
+                raise RuntimeError(
+                    f"EvaluatorAgent missing expected dimensions {sorted(missing_dimensions)} for case_id={dataset_item.get('case_id')!r}"
+                )
         return {
             "scorecard": scorecard,
             "case_id": dataset_item.get("case_id"),
