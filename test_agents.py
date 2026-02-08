@@ -194,6 +194,10 @@ class TestEvaluatorAgent(unittest.TestCase):
         self.assertIn("adaptability", evaluation["scores"])
         self.assertIn("composure", evaluation["scores"])
         self.assertIn("effectiveness", evaluation["scores"])
+
+        for _, value in evaluation["scores"].items():
+            self.assertGreaterEqual(value, 1.0)
+            self.assertLessEqual(value, 10.0)
     
     def test_score_calculations(self):
         """Test that scores are calculated correctly."""
@@ -231,6 +235,7 @@ class TestEvaluatorAgent(unittest.TestCase):
         self.assertIn("PERFORMANCE SCORECARD", report)
         self.assertIn("SCORES (1-10 scale)", report)
         self.assertIn("COACHING POINTS", report)
+        self.assertIn("Clarity:", report)
 
 
 if __name__ == '__main__':

@@ -88,7 +88,10 @@ class OpikTracer:
             if configure_kwargs:
                 opik.configure(**configure_kwargs)
 
-            self.client = opik.Opik(project_name=self.config["project_name"])
+            self.client = opik.Opik(
+                project_name=self.config["project_name"],
+                workspace=self.config.get("workspace"),
+            )
             
             # Enable OpenAI tracking if OpenAI is available
             try:
@@ -270,7 +273,12 @@ class OpikTracer:
                 self.client.log_traces_feedback_scores(feedback_scores)
 
         except Exception as e:
-            logger.error(f"Failed to log scorecard feedback scores: {e}")
+            logger.error(
+                "Failed to log scorecard feedback scores for trace %s with keys %s: %s",
+                getattr(trace, "id", None),
+                list(((scorecard or {}).get("scores") or {}).keys()),
+                e,
+            )
     
     @contextmanager
     def trace_llm_span(

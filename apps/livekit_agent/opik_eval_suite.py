@@ -194,7 +194,7 @@ def main() -> int:
     if configure_kwargs:
         opik.configure(**configure_kwargs)
 
-    client = opik.Opik(project_name=config["project_name"])
+    client = opik.Opik(project_name=config["project_name"], workspace=config["workspace"])
     dataset_name = os.getenv("OPIK_EVAL_DATASET", "difficultai-scorecard-regression")
     dataset = client.get_or_create_dataset(
         name=dataset_name,
@@ -223,7 +223,15 @@ def main() -> int:
     def _scorecard_dimension(name: str, key: str):
         def scorer(dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]):
             scores = (task_outputs.get("scorecard") or {}).get("scores") or {}
-            value = float(scores.get(key, 0.0))
+            if key not in scores:
+                raise KeyError(f"Missing scorecard dimension '{key}' in scores: {scores!r}")
+
+            try:
+                value = float(scores[key])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Non-numeric value for scorecard dimension '{key}': {scores[key]!r}"
+                ) from exc
             return ScoreResult(name=name, value=value)
 
         return scorer
