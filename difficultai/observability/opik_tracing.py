@@ -280,17 +280,11 @@ class OpikTracer:
                 count += 1
 
             if count > 0:
-                overall_value = None
-                try:
-                    overall_value = float(scores.get("effectiveness"))
-                except (TypeError, ValueError):
-                    overall_value = None
-
                 feedback_scores.append(
                     {
                         "id": trace.id,
-                        "name": f"{category_name}.overall",
-                        "value": overall_value if overall_value is not None else (total / count),
+                        "name": f"{category_name}.average",
+                        "value": total / count,
                         "category_name": category_name,
                     }
                 )

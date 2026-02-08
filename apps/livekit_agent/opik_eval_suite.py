@@ -38,7 +38,13 @@ def _repo_root() -> Path:
 
     # Fallback: assume repo root is two levels up from this file. Prefer failing fast
     # if the result doesn't look like a repo checkout.
-    fallback = path.parents[2]
+    parents = list(path.parents)
+    if len(parents) <= 2:
+        raise RuntimeError(
+            f"Could not locate repository root from {path}; ensure .git is present or set REPO_ROOT."
+        )
+
+    fallback = parents[2]
     if (fallback / "requirements.txt").is_file() or (fallback / "Makefile").is_file():
         return fallback
 
@@ -226,6 +232,9 @@ def main() -> int:
         print("Missing Opik credentials: set OPIK_API_KEY or OPIK_URL_OVERRIDE.")
         return 2
 
+    dataset_version = os.getenv("OPIK_EVAL_DATASET_VERSION", "v1")
+    strict_eval = os.getenv("OPIK_EVAL_STRICT", "1").lower() not in ("0", "false", "no")
+
     import opik
     from opik.evaluation.metrics.score_result import ScoreResult
 
@@ -240,7 +249,10 @@ def main() -> int:
     configure_opik(config)
 
     client = opik.Opik(project_name=config["project_name"], workspace=config["workspace"])
-    dataset_name = os.getenv("OPIK_EVAL_DATASET", "difficultai-scorecard-regression")
+    dataset_name = os.getenv(
+        "OPIK_EVAL_DATASET",
+        f"difficultai-scorecard-regression-{dataset_version}",
+    )
     dataset = client.get_or_create_dataset(
         name=dataset_name,
         description="Deterministic scorecard regression dataset for DifficultAI",
@@ -284,9 +296,16 @@ def main() -> int:
         scorecard = evaluator.evaluate_conversation(metrics=metrics, scenario=scenario)
 
         if not isinstance(scorecard, dict) or "scores" not in (scorecard or {}):
-            raise RuntimeError(
+            reason = (
                 f"EvaluatorAgent returned invalid scorecard for case_id={dataset_item.get('case_id')!r}: {scorecard!r}"
             )
+            if strict_eval:
+                raise RuntimeError(reason)
+            return {
+                "scorecard": {"scores": {}},
+                "case_id": dataset_item.get("case_id"),
+                "error": reason,
+            }
         return {
             "scorecard": scorecard,
             "case_id": dataset_item.get("case_id"),
@@ -295,13 +314,12 @@ def main() -> int:
     def _scorecard_dimension(name: str, key: str):
         def scorer(dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]):
             scores = (task_outputs.get("scorecard") or {}).get("scores") or {}
-            strict = os.getenv("OPIK_EVAL_STRICT", "1").lower() not in ("0", "false", "no")
             if key not in scores:
                 reason = (
                     f"Missing scorecard dimension '{key}' for case_id={dataset_item.get('case_id')!r} "
                     f"in scores: {scores!r}"
                 )
-                if strict:
+                if strict_eval:
                     raise KeyError(reason)
                 return ScoreResult(name=name, value=0.0, reason=reason, scoring_failed=True)
 
@@ -312,7 +330,7 @@ def main() -> int:
                     f"Non-numeric value for scorecard dimension '{key}' for case_id={dataset_item.get('case_id')!r}: "
                     f"{scores[key]!r}"
                 )
-                if strict:
+                if strict_eval:
                     raise ValueError(reason) from exc
                 return ScoreResult(name=name, value=0.0, reason=reason, scoring_failed=True)
             return ScoreResult(name=name, value=value)
@@ -330,7 +348,6 @@ def main() -> int:
 
     sha = _git_sha()
     environment = os.getenv("OPIK_EVAL_ENV", os.getenv("APP_ENV", "local"))
-    dataset_version = os.getenv("OPIK_EVAL_DATASET_VERSION", "v1")
     experiment_config: Dict[str, Any] = {
         "git_sha": sha,
         "eval_suite": "scorecard_regression",
