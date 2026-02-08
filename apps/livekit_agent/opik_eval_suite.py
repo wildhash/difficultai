@@ -264,24 +264,30 @@ def main() -> int:
 
     evaluator = EvaluatorAgent()
 
-    for sample in seed_items:
-        first = evaluator.evaluate_conversation(
-            metrics=sample["metrics"],
-            scenario=sample["scenario"],
-        )
-        second = evaluator.evaluate_conversation(
-            metrics=sample["metrics"],
-            scenario=sample["scenario"],
-        )
-        if (first.get("scores") or {}) != (second.get("scores") or {}):
-            print(
-                "ERROR: EvaluatorAgent produced different scores for identical input. "
-                "Check for hidden randomness or time-based logic."
+    check_determinism = os.getenv("OPIK_EVAL_CHECK_DETERMINISM", "1").lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+    if check_determinism:
+        for sample in seed_items:
+            first = evaluator.evaluate_conversation(
+                metrics=sample["metrics"],
+                scenario=sample["scenario"],
             )
-            raise RuntimeError(
-                f"EvaluatorAgent is non-deterministic for case_id={sample.get('case_id')!r}; "
-                "not suitable for regression eval suite"
+            second = evaluator.evaluate_conversation(
+                metrics=sample["metrics"],
+                scenario=sample["scenario"],
             )
+            if (first.get("scores") or {}) != (second.get("scores") or {}):
+                print(
+                    "ERROR: EvaluatorAgent produced different scores for identical input. "
+                    "Check for hidden randomness or time-based logic."
+                )
+                raise RuntimeError(
+                    f"EvaluatorAgent is non-deterministic for case_id={sample.get('case_id')!r}; "
+                    "not suitable for regression eval suite"
+                )
 
     # Insert seed cases if the dataset is empty (or count is unavailable).
     if (dataset.dataset_items_count or 0) == 0:
@@ -302,7 +308,7 @@ def main() -> int:
             if strict_eval:
                 raise RuntimeError(reason)
             return {
-                "scorecard": {"scores": {}},
+                "scorecard": None,
                 "case_id": dataset_item.get("case_id"),
                 "error": reason,
             }
@@ -313,6 +319,10 @@ def main() -> int:
 
     def _scorecard_dimension(name: str, key: str):
         def scorer(dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]):
+            if task_outputs.get("scorecard") is None:
+                reason = task_outputs.get("error") or "Task returned no scorecard"
+                return ScoreResult(name=name, value=0.0, reason=reason, scoring_failed=True)
+
             scores = (task_outputs.get("scorecard") or {}).get("scores") or {}
             if key not in scores:
                 reason = (

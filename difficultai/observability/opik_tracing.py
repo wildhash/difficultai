@@ -236,7 +236,7 @@ class OpikTracer:
         scorecard: Dict[str, Any],
         category_name: str = "scorecard",
     ) -> None:
-        """Log scorecard dimensions as Opik feedback scores for the current trace.
+        """Log numeric scorecard dimensions (expected 1-10 scale) as Opik feedback scores.
 
         This makes scorecard results easy to aggregate and compare in Opik.
         """
@@ -256,6 +256,14 @@ class OpikTracer:
                 return
 
             feedback_scores = []
+            allowed_for_average = {
+                "clarity",
+                "confidence",
+                "commitment",
+                "adaptability",
+                "composure",
+                "effectiveness",
+            }
             total = 0.0
             count = 0
             skipped_keys = []
@@ -276,8 +284,9 @@ class OpikTracer:
                     }
                 )
 
-                total += f_value
-                count += 1
+                if key in allowed_for_average:
+                    total += f_value
+                    count += 1
 
             if count > 0:
                 feedback_scores.append(
