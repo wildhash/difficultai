@@ -53,7 +53,8 @@ def configure_opik(config: Optional[Dict[str, Any]] = None) -> None:
     cfg = config or get_opik_config()
     try:
         import opik
-    except Exception:
+    except Exception as exc:
+        logger.warning("Opik SDK is not available; observability is disabled: %s", exc)
         return
 
     configure_kwargs: Dict[str, Any] = {}

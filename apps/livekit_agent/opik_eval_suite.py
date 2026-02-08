@@ -36,6 +36,12 @@ def _repo_root() -> Path:
         if (parent / ".git").is_dir():
             return parent
 
+    # Fallback: assume repo root is two levels up from this file. Prefer failing fast
+    # if the result doesn't look like a repo checkout.
+    fallback = path.parents[2]
+    if (fallback / "requirements.txt").is_file() or (fallback / "Makefile").is_file():
+        return fallback
+
     raise RuntimeError(
         f"Could not locate repository root from {path}; ensure .git is present or set REPO_ROOT."
     )
@@ -89,6 +95,19 @@ def _validate_seed_item(item: Dict[str, Any]) -> None:
         raise ValueError(
             f"Invalid dataset item {item.get('case_id')!r}: missing metrics {sorted(missing_metrics)} "
             f"or scenario {sorted(missing_scenario)}"
+        )
+
+    for key in _REQUIRED_METRICS_KEYS:
+        try:
+            float(metrics[key])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Metric {key!r} for case_id={item.get('case_id')!r} must be numeric, got {metrics[key]!r}"
+            ) from exc
+
+    if metrics.get("total_exchanges", 0) <= 0:
+        raise ValueError(
+            f"total_exchanges must be positive for case_id={item.get('case_id')!r}, got {metrics.get('total_exchanges')!r}"
         )
 
 
@@ -263,6 +282,11 @@ def main() -> int:
         metrics = dataset_item.get("metrics") or {}
         scenario = dataset_item.get("scenario") or {}
         scorecard = evaluator.evaluate_conversation(metrics=metrics, scenario=scenario)
+
+        if not isinstance(scorecard, dict) or "scores" not in (scorecard or {}):
+            raise RuntimeError(
+                f"EvaluatorAgent returned invalid scorecard for case_id={dataset_item.get('case_id')!r}: {scorecard!r}"
+            )
         return {
             "scorecard": scorecard,
             "case_id": dataset_item.get("case_id"),
