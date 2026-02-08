@@ -9,7 +9,6 @@ function App() {
   
   // Room Configuration
   const [roomName, setRoomName] = useState('')
-  const [participantName, setParticipantName] = useState('')
   const [livekitUrl, setLivekitUrl] = useState('')
   const [accessToken, setAccessToken] = useState('')
   
@@ -35,6 +34,20 @@ function App() {
       user_goal: userGoal,
       difficulty: parseFloat(difficulty),
     }, null, 2)
+  }
+
+  const normalizeRole = (rawRole, participantIdentity) => {
+    if (typeof rawRole === 'string' && rawRole.trim()) {
+      const roleValue = rawRole.trim().toLowerCase()
+      if (roleValue === 'agent' || roleValue === 'assistant') return 'Agent'
+      if (roleValue === 'user' || roleValue === 'participant') return 'User'
+      if (roleValue === 'system') return 'System'
+      return 'User'
+    }
+
+    const identity = typeof participantIdentity === 'string' ? participantIdentity.toLowerCase() : ''
+    if (identity.startsWith('agent-') || identity.endsWith('-agent')) return 'Agent'
+    return 'User'
   }
   
   // Connect to room
@@ -78,8 +91,10 @@ function App() {
         try {
           const parsed = JSON.parse(data)
           if (parsed.type === 'transcript') {
+            const role = normalizeRole(parsed.role, participant?.identity)
+
             setTranscripts(prev => [...prev, {
-              role: participant.identity.includes('agent') ? 'Agent' : 'User',
+              role,
               text: parsed.text,
               timestamp: new Date().toLocaleTimeString(),
             }])
@@ -224,7 +239,7 @@ function App() {
             <button className="btn-primary" onClick={() => {
               const json = getScenarioJSON()
               navigator.clipboard.writeText(json)
-              alert('Scenario JSON copied to clipboard!\n\nPaste this into LiveKit Agents Playground as room metadata.')
+              alert('Scenario JSON copied to clipboard!\n\nPaste this into LiveKit Agents Playground as room metadata.\n\nNote: This is not sent automatically when connecting directly.')
             }}>
               📋 Copy Scenario JSON
             </button>
@@ -235,6 +250,7 @@ function App() {
             <p className="note">
               <strong>Note:</strong> To connect directly, you need a LiveKit access token.
               See README for token generation instructions.
+              Scenario JSON is only used if it was set as room metadata when the room was created.
             </p>
             
             <div className="form-group">
@@ -254,16 +270,6 @@ function App() {
                 value={roomName}
                 onChange={(e) => setRoomName(e.target.value)}
                 placeholder="my-training-room"
-              />
-            </div>
-            
-            <div className="form-group">
-              <label>Participant Name (optional):</label>
-              <input
-                type="text"
-                value={participantName}
-                onChange={(e) => setParticipantName(e.target.value)}
-                placeholder="Your Name"
               />
             </div>
             

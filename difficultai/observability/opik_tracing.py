@@ -20,11 +20,15 @@ Trace Structure:
 import os
 import logging
 import time
-from typing import Dict, Any, Optional, Callable
+import warnings
+from contextvars import ContextVar
+from typing import Any, Callable, Dict, Optional
 from contextlib import contextmanager
 from functools import wraps
 
 logger = logging.getLogger(__name__)
+
+_current_trace: ContextVar[Optional[Any]] = ContextVar("opik_current_trace", default=None)
 
 
 def is_opik_enabled() -> bool:
@@ -61,7 +65,7 @@ class OpikTracer:
         self.enabled = is_opik_enabled()
         self.config = get_opik_config()
         self.client = None
-        self.current_trace = None
+        self.openai_client = None
         
         if self.enabled:
             self._initialize_opik()
@@ -73,28 +77,28 @@ class OpikTracer:
         try:
             import opik
             
-            # Configure Opik
-            configure_kwargs = {
-                "project_name": self.config["project_name"],
-            }
-            
+            configure_kwargs: Dict[str, Any] = {}
             if self.config["api_key"]:
                 configure_kwargs["api_key"] = self.config["api_key"]
-            
+            if self.config.get("workspace"):
+                configure_kwargs["workspace"] = self.config["workspace"]
             if self.config["url_override"]:
                 configure_kwargs["url"] = self.config["url_override"]
-                
-            opik.configure(**configure_kwargs)
-            
-            self.client = opik.Opik()
+
+            if configure_kwargs:
+                opik.configure(**configure_kwargs)
+
+            self.client = opik.Opik(project_name=self.config["project_name"])
             
             # Enable OpenAI tracking if OpenAI is available
             try:
                 from opik.integrations.openai import track_openai
                 import openai
                 
-                # Track OpenAI calls automatically
-                openai_client = track_openai(openai.Client())
+                self.openai_client = track_openai(
+                    openai.Client(),
+                    project_name=self.config["project_name"],
+                )
                 logger.info("✓ Opik OpenAI integration enabled")
             except ImportError:
                 logger.info("OpenAI SDK not tracked (import failed)")
@@ -130,12 +134,21 @@ class OpikTracer:
         
         try:
             import opik
+
+            existing_trace = _current_trace.get()
+            if existing_trace is not None:
+                logger.warning(
+                    "Opik trace already active in this context; resetting before starting a new one"
+                )
+                self.reset_trace()
             
+            safe_scenario: Dict[str, Any] = scenario or {}
+
             # Extract scenario details
-            persona = scenario.get("persona_type", "unknown")
-            role = scenario.get("role", "unknown")
-            difficulty = scenario.get("difficulty", 0.5)
-            company = scenario.get("company", "unknown")
+            persona = safe_scenario.get("persona_type", "unknown")
+            role = safe_scenario.get("role", "unknown")
+            difficulty = safe_scenario.get("difficulty", 0.5)
+            company = safe_scenario.get("company", "unknown")
             
             # Create trace with rich metadata
             trace = self.client.trace(
@@ -144,7 +157,7 @@ class OpikTracer:
                     "livekit_room": livekit_room,
                     "session_id": session_id,
                     "participant_identity": participant_identity,
-                    "scenario": scenario,
+                    "scenario": safe_scenario,
                 },
                 metadata={
                     "livekit_room": livekit_room,
@@ -156,35 +169,51 @@ class OpikTracer:
                     "company": company,
                     "scenario_type": "voice_conversation",
                 },
-                tags=["difficultai", "livekit", persona.lower()],
+                tags=["difficultai", "livekit", str(persona).lower()],
             )
             
-            self.current_trace = trace
+            _current_trace.set(trace)
             logger.info(f"Started Opik trace: {trace.id}")
             return trace
             
         except Exception as e:
             logger.error(f"Failed to start session trace: {e}")
+            _current_trace.set(None)
             return None
+
+    def has_active_trace(self) -> bool:
+        """Return True if a trace is currently active in this async context."""
+        return self.enabled and _current_trace.get() is not None
+
+    def reset_trace(self):
+        """Best-effort cleanup of any active trace in this async context."""
+        trace = _current_trace.get()
+        if not trace:
+            return
+
+        try:
+            trace.end()
+        except Exception as e:
+            logger.error(f"Failed to end stale Opik trace during reset: {e}")
+        finally:
+            _current_trace.set(None)
     
     def end_session_trace(self, output: Optional[Dict[str, Any]] = None):
-        """
-        End the current session trace.
-        
-        Args:
-            output: Optional output data (e.g., scorecard, final metrics)
-        """
-        if not self.enabled or not self.current_trace:
+        """End the current session trace."""
+        trace = _current_trace.get()
+
+        if not self.enabled or not trace:
             return
-        
+
         try:
             if output:
-                self.current_trace.update(output=output)
-            self.current_trace.end()
+                trace.update(output=output)
+            trace.end()
             logger.info("Ended Opik trace")
-            self.current_trace = None
         except Exception as e:
             logger.error(f"Failed to end session trace: {e}")
+        finally:
+            _current_trace.set(None)
     
     @contextmanager
     def trace_llm_span(
@@ -209,35 +238,44 @@ class OpikTracer:
                 response = llm.chat(messages)
                 span.update(output=response)
         """
-        if not self.enabled or not self.current_trace:
+        trace = _current_trace.get()
+        if not self.enabled or not trace:
             yield None
             return
-        
+
+        merged_metadata = {
+            "model": model,
+            **(metadata or {}),
+        }
+
         try:
-            span = self.current_trace.span(
+            span = trace.span(
                 name="llm_call",
                 type="llm",
                 input={"messages": messages} if messages else {},
-                metadata={
-                    "model": model,
-                    **(metadata or {}),
-                },
+                metadata=merged_metadata,
             )
-            
+
             start_time = time.time()
-            
+
             try:
                 yield span
             finally:
                 duration = time.time() - start_time
-                span.update(
-                    metadata={
-                        **span.metadata,
-                        "duration_seconds": duration,
+                final_metadata: Dict[str, Any] = {
+                    **merged_metadata,
+                    "duration_seconds": duration,
+                }
+                span_metadata = getattr(span, "metadata", None)
+                if isinstance(span_metadata, dict):
+                    final_metadata = {
+                        **span_metadata,
+                        **final_metadata,
                     }
-                )
+
+                span.update(metadata=final_metadata)
                 span.end()
-                
+
         except Exception as e:
             logger.error(f"Failed to trace LLM span: {e}")
             yield None
@@ -258,35 +296,44 @@ class OpikTracer:
         Yields:
             Span object for additional logging
         """
-        if not self.enabled or not self.current_trace:
+        trace = _current_trace.get()
+        if not self.enabled or not trace:
             yield None
             return
-        
+
+        merged_metadata = {
+            "provider": provider,
+            "operation": "speech_to_text",
+            **(metadata or {}),
+        }
+
         try:
-            span = self.current_trace.span(
+            span = trace.span(
                 name="stt_call",
                 type="tool",
-                metadata={
-                    "provider": provider,
-                    "operation": "speech_to_text",
-                    **(metadata or {}),
-                },
+                metadata=merged_metadata,
             )
-            
+
             start_time = time.time()
-            
+
             try:
                 yield span
             finally:
                 duration = time.time() - start_time
-                span.update(
-                    metadata={
-                        **span.metadata,
-                        "duration_seconds": duration,
+                final_metadata: Dict[str, Any] = {
+                    **merged_metadata,
+                    "duration_seconds": duration,
+                }
+                span_metadata = getattr(span, "metadata", None)
+                if isinstance(span_metadata, dict):
+                    final_metadata = {
+                        **span_metadata,
+                        **final_metadata,
                     }
-                )
+
+                span.update(metadata=final_metadata)
                 span.end()
-                
+
         except Exception as e:
             logger.error(f"Failed to trace STT span: {e}")
             yield None
@@ -309,40 +356,46 @@ class OpikTracer:
         Yields:
             Span object for additional logging
         """
-        if not self.enabled or not self.current_trace:
+        trace = _current_trace.get()
+        if not self.enabled or not trace:
             yield None
             return
-        
+
+        merged_metadata = {
+            "provider": provider,
+            "operation": "text_to_speech",
+            **(metadata or {}),
+        }
+        if voice:
+            merged_metadata["voice"] = voice
+
         try:
-            span_metadata = {
-                "provider": provider,
-                "operation": "text_to_speech",
-                **(metadata or {}),
-            }
-            
-            if voice:
-                span_metadata["voice"] = voice
-            
-            span = self.current_trace.span(
+            span = trace.span(
                 name="tts_call",
                 type="tool",
-                metadata=span_metadata,
+                metadata=merged_metadata,
             )
-            
+
             start_time = time.time()
-            
+
             try:
                 yield span
             finally:
                 duration = time.time() - start_time
-                span.update(
-                    metadata={
-                        **span.metadata,
-                        "duration_seconds": duration,
+                final_metadata: Dict[str, Any] = {
+                    **merged_metadata,
+                    "duration_seconds": duration,
+                }
+                span_metadata = getattr(span, "metadata", None)
+                if isinstance(span_metadata, dict):
+                    final_metadata = {
+                        **span_metadata,
+                        **final_metadata,
                     }
-                )
+
+                span.update(metadata=final_metadata)
                 span.end()
-                
+
         except Exception as e:
             logger.error(f"Failed to trace TTS span: {e}")
             yield None
@@ -359,7 +412,8 @@ class OpikTracer:
             error: Exception that occurred
             context: Additional context about the error
         """
-        if not self.enabled or not self.current_trace:
+        trace = _current_trace.get()
+        if not self.enabled or not trace:
             return
         
         try:
@@ -370,7 +424,7 @@ class OpikTracer:
             }
             
             # Create error span
-            span = self.current_trace.span(
+            span = trace.span(
                 name="error",
                 type="tool",
                 metadata=error_data,
@@ -395,109 +449,72 @@ def get_tracer() -> OpikTracer:
     return _global_tracer
 
 
-# Convenience functions for common operations
-
 def trace_session(func: Callable) -> Callable:
-    """
-    Decorator for tracing a complete session.
-    
-    The decorated function should accept 'ctx' (JobContext) as first argument.
-    """
+    warnings.warn(
+        "trace_session is deprecated; use get_tracer().start_session_trace()/end_session_trace instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     @wraps(func)
     async def wrapper(*args, **kwargs):
-        tracer = get_tracer()
-        
-        # Try to extract context from args
-        ctx = None
-        for arg in args:
-            if hasattr(arg, 'room') and hasattr(arg, 'job'):
-                ctx = arg
-                break
-        
-        if ctx and tracer.enabled:
-            # Extract session info
-            room_name = ctx.room.name if hasattr(ctx, 'room') else "unknown"
-            session_id = ctx.job.id if hasattr(ctx.job, 'id') else "unknown"
-            
-            # Start trace
-            tracer.start_session_trace(
-                livekit_room=room_name,
-                session_id=session_id,
-                participant_identity="participant",
-                scenario={},
-            )
-        
-        try:
-            result = await func(*args, **kwargs)
-            return result
-        finally:
-            if tracer.enabled:
-                tracer.end_session_trace()
-    
+        return await func(*args, **kwargs)
+
     return wrapper
 
 
 def trace_llm_call(model: str, messages: Optional[list] = None):
-    """
-    Decorator for tracing LLM calls.
-    
-    Usage:
-        @trace_llm_call("gpt-4")
-        async def call_llm(messages):
-            return await llm.chat(messages)
-    """
+    warnings.warn(
+        "trace_llm_call is deprecated; use OpikTracer.trace_llm_span instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(*args, **kwargs):
             tracer = get_tracer()
-            
             with tracer.trace_llm_span(model, messages):
-                result = await func(*args, **kwargs)
-                return result
-        
+                return await func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
 def trace_stt_call(provider: str):
-    """
-    Decorator for tracing STT calls.
-    
-    Usage:
-        @trace_stt_call("deepgram")
-        async def transcribe_audio(audio):
-            return await stt.transcribe(audio)
-    """
+    warnings.warn(
+        "trace_stt_call is deprecated; use OpikTracer.trace_stt_span instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(*args, **kwargs):
             tracer = get_tracer()
-            
             with tracer.trace_stt_span(provider):
-                result = await func(*args, **kwargs)
-                return result
-        
+                return await func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
 def trace_tts_call(provider: str, voice: Optional[str] = None):
-    """
-    Decorator for tracing TTS calls.
-    
-    Usage:
-        @trace_tts_call("openai", voice="marin")
-        async def synthesize_speech(text):
-            return await tts.synthesize(text)
-    """
+    warnings.warn(
+        "trace_tts_call is deprecated; use OpikTracer.trace_tts_span instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(*args, **kwargs):
             tracer = get_tracer()
-            
-            with tracer.trace_tts_span(provider, voice):
-                result = await func(*args, **kwargs)
-                return result
-        
+            with tracer.trace_tts_span(provider, voice=voice):
+                return await func(*args, **kwargs)
+
         return wrapper
+
     return decorator

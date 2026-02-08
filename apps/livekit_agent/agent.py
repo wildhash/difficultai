@@ -39,6 +39,7 @@ import asyncio
 import logging
 import os
 import json
+import uuid
 from typing import Dict, Any, Optional
 from dataclasses import asdict
 
@@ -59,7 +60,7 @@ from apps.livekit_agent.scenario_validator import (
     get_missing_fields,
     is_scenario_complete
 )
-from difficultai.observability import OpikTracer, get_tracer
+from difficultai.observability import get_tracer
 
 logger = logging.getLogger(__name__)
 
@@ -120,15 +121,22 @@ class DifficultAIAgent:
         participant = await self.ctx.wait_for_participant()
         logger.info(f"Participant joined: {participant.identity}")
         
+        session_id = getattr(self.ctx.job, "id", None)
+        if session_id is None:
+            session_id = f"unknown-{uuid.uuid4()}"
+            logger.warning("Job missing id; using fallback session_id for Opik trace")
+
         # Start Opik session trace
         if self.opik_tracer.enabled:
             self.opik_tracer.start_session_trace(
                 livekit_room=self.ctx.room.name,
-                session_id=self.ctx.job.id if hasattr(self.ctx.job, 'id') else "unknown",
+                session_id=str(session_id),
                 participant_identity=participant.identity,
                 scenario=self.session.scenario,
             )
-        
+
+        opik_output = None
+
         try:
             # Try to use OpenAI Realtime API, fallback to STT->LLM->TTS if unavailable
             try:
@@ -157,12 +165,11 @@ class DifficultAIAgent:
             # Generate and send scorecard
             evaluation = await self._generate_scorecard()
             
-            # End Opik trace with scorecard output
-            if self.opik_tracer.enabled:
-                self.opik_tracer.end_session_trace(output={
-                    "scorecard": evaluation,
-                    "transcript_length": len(self.session.transcript),
-                })
+            opik_output = {
+                "status": "ok",
+                "scorecard": evaluation,
+                "transcript_length": len(self.session.transcript),
+            }
                 
         except Exception as e:
             # Log error to Opik
@@ -171,9 +178,19 @@ class DifficultAIAgent:
                     "room": self.ctx.room.name,
                     "stage": "entrypoint",
                 })
+                
+                opik_output = {
+                    "status": "error",
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "transcript_length": len(self.session.transcript),
+                }
             
             # Re-raise to let LiveKit handle it
             raise
+        finally:
+            if self.opik_tracer.enabled:
+                self.opik_tracer.end_session_trace(output=opik_output)
     
     async def _create_realtime_assistant(self):
         """Create assistant using OpenAI Realtime API."""
