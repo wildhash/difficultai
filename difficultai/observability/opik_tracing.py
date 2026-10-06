@@ -34,9 +34,10 @@ _current_trace: ContextVar[Optional[Any]] = ContextVar("opik_current_trace", def
 
 
 def is_opik_enabled() -> bool:
-    """Check if Opik tracing is enabled."""
+    """Enable optional tracing only when its destination is configured."""
     disabled = os.getenv("OPIK_DISABLED", "").lower() in ("1", "true", "yes")
-    return not disabled
+    configured = bool(os.getenv("OPIK_API_KEY") or os.getenv("OPIK_URL_OVERRIDE"))
+    return configured and not disabled
 
 
 def get_opik_config() -> Dict[str, Any]:

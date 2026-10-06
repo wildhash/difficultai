@@ -311,7 +311,8 @@ jwt = token.to_jwt()
 
 ### Scorecards
 
-Scorecards are saved to `scorecard_{room_name}.json`. Set up:
+Scorecards are saved to `SCORECARD_DIR/scorecard_<session_id>.json` (default
+directory: `scorecards`). Mount persistent storage at that directory. Set up:
 
 1. **Regular backups**: Copy scorecard files to persistent storage
 2. **Database integration**: Store in PostgreSQL/MongoDB for long-term retention
@@ -321,7 +322,7 @@ Example backup script:
 ```bash
 #!/bin/bash
 # Backup scorecards to S3
-aws s3 sync . s3://difficultai-scorecards/ --include "scorecard_*.json"
+aws s3 sync ./scorecards/ s3://difficultai-scorecards/ --exclude "*" --include "scorecard_*.json"
 ```
 
 ## Updates and Maintenance

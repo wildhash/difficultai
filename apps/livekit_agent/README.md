@@ -1,6 +1,8 @@
 # DifficultAI LiveKit Agent
 
-This directory contains the production LiveKit agent implementation for DifficultAI - a voice-to-voice conversational agent that conducts high-pressure training conversations using OpenAI's Realtime API.
+This directory contains the LiveKit Agents 1.x worker for DifficultAI. Local SDK
+and lifecycle tests run without credentials; a live voice acceptance session is
+still required before treating a deployment as operational.
 
 ## Overview
 
@@ -39,8 +41,12 @@ LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
 
 # Optional
-DEEPGRAM_API_KEY=your_deepgram_key  # For STT fallback
+DEEPGRAM_API_KEY=  # Optional, used only in pipeline mode; empty selects OpenAI STT
 DEFAULT_VOICE=marin  # Options: alloy, echo, fable, onyx, nova, shimmer, marin
+VOICE_MODE=realtime  # Or pipeline for STT -> LLM -> TTS
+FALLBACK_TTS_VOICE=alloy
+SCORECARD_DIR=scorecards
+OPIK_DISABLED=1  # Optional tracing can be enabled after configuring its destination
 ```
 
 ### 2. Install Dependencies
@@ -60,6 +66,13 @@ python apps/livekit_agent/agent.py dev
 ```
 
 This starts the agent in development mode, connecting to your LiveKit server.
+
+`VOICE_MODE` explicitly chooses the provider pipeline. There is no automatic
+runtime failover. Session instructions belong to `Agent`; both modes use
+`AgentSession` and its `conversation_item_added` / `close` events. Committed
+turns are sent over the JSON transcript data channel consumed by the web demo.
+Dispatch metadata takes precedence over room metadata. No audio recording is
+enabled by this worker.
 
 ### Testing with LiveKit CLI
 
@@ -153,12 +166,13 @@ See `docs/scenario_contract.md` for full schema documentation.
 
 At the end of each conversation, the agent generates a detailed scorecard with:
 
-- **Performance Scores** (0-100 for each dimension):
+- **Heuristic Performance Scores** (1-10 for each dimension):
   - Clarity - How clear and specific were responses
   - Confidence - Confidence level demonstrated
   - Commitment - Quality of commitments made
   - Adaptability - Ability to adapt under pressure
-  - Overall - Combined performance score
+  - Composure - Response under pressure
+  - Effectiveness - Progress toward the scenario goal
 
 - **Feedback**:
   - Strengths identified
@@ -166,7 +180,13 @@ At the end of each conversation, the agent generates a detailed scorecard with:
   - Specific recommendations
   - Key moments to review
 
-Scorecards are saved to `scorecard_{room_name}.json` and logged.
+Scorecards are saved atomically to `SCORECARD_DIR/scorecard_<session_id>.json`.
+Each run has a unique ID, so repeated room names do not overwrite past sessions.
+Records include the room, job, transcript, heuristic evaluation, and a
+`completed` or `failed` status. Scorecards contain private conversation data;
+the default directory is ignored by Git. Configure a persistent volume for
+retention across worker/container replacement. This file store does not provide
+authenticated customer retrieval or managed backups.
 
 ## Development
 
@@ -174,7 +194,7 @@ Scorecards are saved to `scorecard_{room_name}.json` and logged.
 
 Run unit tests:
 ```bash
-python -m unittest test_livekit_agent -v
+OPIK_DISABLED=1 DOTENV_DISABLED=1 python -m unittest discover -p 'test_*.py' -v
 ```
 
 ### Debugging
