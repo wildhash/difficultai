@@ -1,7 +1,12 @@
-name: Deploy web demo to GitHub Pages
+name: Web demo CI and Pages
 
 on:
   push:
+    branches: [main]
+    paths:
+      - 'apps/web/demo/**'
+      - '.github/workflows/deploy-pages.yml'
+  pull_request:
     branches: [main]
     paths:
       - 'apps/web/demo/**'
@@ -10,16 +15,15 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: web-demo-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,27 +39,39 @@ jobs:
         working-directory: apps/web/demo
         run: npm ci
 
+      - name: Test room lifecycle
+        working-directory: apps/web/demo
+        run: npm test
+
       - name: Build static site
         working-directory: apps/web/demo
         env:
           GITHUB_PAGES: 'true'
         run: npm run build
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
       - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: apps/web/demo/dist
 
   deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: build
     steps:
+      # Requires Settings -> Pages -> Source: GitHub Actions (see demo README).
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

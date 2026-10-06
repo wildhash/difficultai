@@ -4,7 +4,7 @@ import './App.css'
 
 function App() {
   // UI State
-  const [connectionState, setConnectionState] = useState('disconnected') // disconnected, connecting, connected
+  const [connectionState, setConnectionState] = useState('disconnected')
   const [transcripts, setTranscripts] = useState([])
   
   // Room Configuration
@@ -23,6 +23,7 @@ function App() {
   // LiveKit Room
   const roomRef = useRef(null)
   const audioElementRef = useRef(null)
+  const mountedRef = useRef(false)
   
   // Generate scenario JSON
   const getScenarioJSON = () => {
@@ -52,20 +53,21 @@ function App() {
   
   // Connect to room
   const connectToRoom = async () => {
-    if (!livekitUrl || !accessToken || !roomName) {
+    if (roomRef.current) return
+    if (!livekitUrl.trim() || !accessToken.trim() || !roomName.trim()) {
       alert('Please fill in all connection fields: LiveKit URL, Access Token, and Room Name')
       return
     }
     
+    const room = new Room()
+    roomRef.current = room
     try {
       setConnectionState('connecting')
       setTranscripts([])
       
-      const room = new Room()
-      roomRef.current = room
-      
       // Set up event listeners
       room.on('trackSubscribed', (track, publication, participant) => {
+        if (roomRef.current !== room) return
         console.log('Track subscribed:', track.kind, 'from', participant.identity)
         
         if (track.kind === 'audio' && audioElementRef.current) {
@@ -79,18 +81,21 @@ function App() {
       })
       
       room.on('disconnected', () => {
+        if (roomRef.current !== room) return
+        roomRef.current = null
         console.log('Disconnected from room')
         setConnectionState('disconnected')
       })
       
       room.on('dataReceived', (payload, participant) => {
+        if (roomRef.current !== room) return
         // Handle transcripts or other data
         const decoder = new TextDecoder()
         const data = decoder.decode(payload)
         
         try {
           const parsed = JSON.parse(data)
-          if (parsed.type === 'transcript') {
+          if (parsed?.type === 'transcript' && typeof parsed.text === 'string') {
             const role = normalizeRole(parsed.role, participant?.identity)
 
             setTranscripts(prev => [...prev, {
@@ -99,29 +104,49 @@ function App() {
               timestamp: new Date().toLocaleTimeString(),
             }])
           }
-        } catch (e) {
-          console.log('Received data:', data)
+        } catch (error) {
+          // Other room data is not necessarily a transcript or valid JSON.
+          console.debug('Ignoring malformed room data:', error)
         }
       })
       
       // Connect to room
-      await room.connect(livekitUrl, accessToken)
+      await room.connect(livekitUrl.trim(), accessToken.trim())
+      if (roomRef.current !== room) {
+        await room.disconnect()
+        return
+      }
+      if (room.name !== roomName.trim()) {
+        throw new Error('The token room does not match the entered Room Name')
+      }
       console.log('Connected to room:', room.name)
       
       // Publish microphone audio
       await room.localParticipant.setMicrophoneEnabled(true)
+      if (roomRef.current !== room) {
+        await room.disconnect()
+        return
+      }
       console.log('Microphone enabled')
       
       setConnectionState('connected')
       
       // Add initial transcript entry
-      setTranscripts([{
+      setTranscripts(prev => [...prev, {
         role: 'System',
         text: `Connected to room: ${room.name}. Speak to start your training session.`,
         timestamp: new Date().toLocaleTimeString(),
       }])
       
     } catch (error) {
+      const isCurrent = roomRef.current === room
+      if (isCurrent) roomRef.current = null
+      try {
+        await room.disconnect()
+      } catch (cleanupError) {
+        console.error('Room cleanup failed:', cleanupError)
+      }
+      if (!isCurrent || !mountedRef.current || roomRef.current) return
       console.error('Failed to connect:', error)
       setConnectionState('disconnected')
       alert(`Connection failed: ${error.message}`)
@@ -130,24 +155,36 @@ function App() {
   
   // Disconnect from room
   const disconnectFromRoom = async () => {
-    if (roomRef.current) {
-      await roomRef.current.disconnect()
-      roomRef.current = null
-      setConnectionState('disconnected')
-      
-      setTranscripts(prev => [...prev, {
-        role: 'System',
-        text: 'Disconnected from room.',
-        timestamp: new Date().toLocaleTimeString(),
-      }])
+    const room = roomRef.current
+    if (!room) return
+    // Invalidate pending connect/microphone work before awaiting the SDK.
+    roomRef.current = null
+    setConnectionState('disconnecting')
+    try {
+      await room.disconnect()
+    } catch (error) {
+      console.error('Failed to disconnect:', error)
+    } finally {
+      if (mountedRef.current && !roomRef.current) {
+        setConnectionState('disconnected')
+        setTranscripts(prev => [...prev, {
+          role: 'System',
+          text: 'Disconnected from room.',
+          timestamp: new Date().toLocaleTimeString(),
+        }])
+      }
     }
   }
   
   // Cleanup on unmount
   useEffect(() => {
+    mountedRef.current = true
     return () => {
-      if (roomRef.current) {
-        roomRef.current.disconnect()
+      mountedRef.current = false
+      const room = roomRef.current
+      roomRef.current = null
+      if (room) {
+        room.disconnect().catch(error => console.error('Room cleanup failed:', error))
       }
     }
   }, [])
@@ -298,7 +335,12 @@ function App() {
         <div className="status-panel">
           <div className="spinner"></div>
           <p>Connecting to room...</p>
+          <button className="btn-danger" onClick={disconnectFromRoom}>Cancel</button>
         </div>
+      )}
+
+      {connectionState === 'disconnecting' && (
+        <div className="status-panel"><p>Disconnecting from room...</p></div>
       )}
       
       {connectionState === 'connected' && (
@@ -333,10 +375,11 @@ function App() {
             </div>
           </div>
           
-          {/* Hidden audio element for agent audio */}
-          <audio ref={audioElementRef} autoPlay />
         </div>
       )}
+
+      {/* Tracks can arrive before connect/microphone setup has finished. */}
+      <audio ref={audioElementRef} autoPlay />
       
       <div className="footer">
         <p>DifficultAI - High-Pressure Voice Training • <a href="https://github.com/wildhash/difficultai" target="_blank" rel="noopener noreferrer">GitHub</a></p>
