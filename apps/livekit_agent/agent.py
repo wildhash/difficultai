@@ -1,38 +1,9 @@
-"""
-DifficultAI LiveKit Voice Agent
+"""DifficultAI voice worker for the pinned LiveKit Agents 1.x SDK.
 
-Production-ready LiveKit agent using OpenAI Realtime API for voice-to-voice
-high-pressure conversation training with automatic fallback to STT->LLM->TTS.
-
-VOICE-TO-VOICE ARCHITECTURE:
-This agent prioritizes OpenAI's Realtime API for native voice-to-voice conversation.
-When Realtime API is available:
-- Voice input (no separate STT)
-- Natural language understanding
-- Voice output (no separate TTS)
-- Lower latency (no transcription overhead)
-- More natural prosody and timing
-- Built-in barge-in support
-
-FALLBACK ARCHITECTURE:
-If Realtime API is unavailable or encounters errors, automatically falls back to:
-- STT: Deepgram or OpenAI Whisper for speech-to-text
-- LLM: OpenAI GPT-4 for language understanding
-- TTS: OpenAI TTS for text-to-speech
-
-INTERRUPTION HANDLING (Barge-in):
-The agent implements explicit cancellation semantics:
-- On user speech start → cancel current TTS output
-- On user speech start → stop current generation
-- This creates the "feels alive" experience
-
-SCENARIO CONTRACT:
-Uses canonical ScenarioConfig with:
-- persona: ANGRY_CUSTOMER | ELITE_INTERVIEWER | etc.
-- difficulty: 0-1 (float, where 0=easy, 1=maximum pressure)
-- company: string
-- role: string
-- goals: string (user's objective)
+VOICE_MODE=realtime (default) uses OpenAI speech-to-speech. VOICE_MODE=pipeline
+selects STT -> LLM -> TTS explicitly; automatic provider failover is not claimed.
+Committed turns are forwarded to the web demo and retained with a per-session
+scorecard in SCORECARD_DIR. Live provider operation requires an acceptance run.
 """
 
 import asyncio
@@ -40,12 +11,13 @@ import logging
 import os
 import json
 import uuid
+import tempfile
 from typing import Dict, Any, Optional
-from dataclasses import asdict
 
-from livekit import agents, rtc
-from livekit.agents import JobContext, WorkerOptions, cli
-from livekit.plugins import openai
+from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
+from livekit.agents.llm import ChatMessage
+from livekit.agents.voice.room_io import RoomOptions
+from livekit.plugins import openai, silero
 
 # Add parent directories to path for imports
 import sys
@@ -53,13 +25,9 @@ from pathlib import Path
 parent_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(parent_dir))
 
-from agents.architect import PersonaType, Scenario, ArchitectAgent
+from agents.architect import PersonaType, ArchitectAgent
 from agents.evaluator import EvaluatorAgent
-from apps.livekit_agent.scenario_validator import (
-    validate_scenario,
-    get_missing_fields,
-    is_scenario_complete
-)
+from apps.livekit_agent.scenario_validator import get_missing_fields
 from difficultai.observability import get_tracer
 
 logger = logging.getLogger(__name__)
@@ -105,165 +73,170 @@ class DifficultAIAgent:
         self.evaluator = EvaluatorAgent()
         self.default_voice = os.getenv("DEFAULT_VOICE", "marin")
         self.opik_tracer = get_tracer()  # Initialize Opik tracer
+        self.session_id = uuid.uuid4().hex
+        self._voice_agent = None
+        self._message_tasks = set()
+        self._session_error = None
         
     async def entrypoint(self):
-        """Main agent entrypoint with Realtime API and STT->LLM->TTS fallback."""
-        logger.info("DifficultAI agent starting...")
-        
-        # Parse job metadata for scenario configuration
-        await self._load_scenario_from_metadata()
-        
-        # Connect to the room
+        """Run a LiveKit Agents 1.x session and finalize its evidence once."""
         await self.ctx.connect()
-        logger.info(f"Connected to room: {self.ctx.room.name}")
-        
-        # Wait for participant
+        await self._load_scenario_from_metadata()
         participant = await self.ctx.wait_for_participant()
-        logger.info(f"Participant joined: {participant.identity}")
-        
-        session_id = getattr(self.ctx.job, "id", None)
-        if session_id is None:
-            session_id = f"unknown-{uuid.uuid4()}"
-            logger.warning("Job missing id; using fallback session_id for Opik trace")
-
-        # Start Opik session trace
+        job_id = str(getattr(self.ctx.job, "id", "unknown"))
         if self.opik_tracer.enabled:
             self.opik_tracer.start_session_trace(
                 livekit_room=self.ctx.room.name,
-                session_id=str(session_id),
+                session_id=self.session_id,
                 participant_identity=participant.identity,
                 scenario=self.session.scenario,
             )
 
-        opik_output = None
+        assistant = None
+        closed = asyncio.Event()
+        finalize_lock = asyncio.Lock()
+        finalized = False
+
+        async def finalize():
+            nonlocal finalized
+            async with finalize_lock:
+                if finalized:
+                    return
+                # Drain pending metadata/transcript sends before persisting the snapshot.
+                if self._message_tasks:
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.gather(*list(self._message_tasks), return_exceptions=True),
+                            timeout=5,
+                        )
+                    except TimeoutError:
+                        logger.warning("Timed out forwarding final transcript events")
+                evaluation = await self._generate_scorecard()
+                finalized = True
+                if self.opik_tracer.enabled:
+                    self.opik_tracer.log_scorecard_feedback_scores(evaluation)
+                    self.opik_tracer.end_session_trace(output={
+                        "status": "failed" if self._session_error else "completed",
+                        "job_id": job_id,
+                        "scorecard": evaluation,
+                        "transcript_length": len(self.session.transcript),
+                    })
+
+        async def shutdown():
+            try:
+                if assistant is not None:
+                    await assistant.aclose()
+            finally:
+                closed.set()
+                await finalize()
+
+        def on_close(event):
+            if event.error is not None or event.reason.value == "error":
+                self._session_error = "LiveKit session closed with a provider error"
+            closed.set()
 
         try:
-            # Try to use OpenAI Realtime API, fallback to STT->LLM->TTS if unavailable
-            try:
-                logger.info("Attempting to use OpenAI Realtime API...")
+            mode = os.getenv("VOICE_MODE", "realtime").strip().lower()
+            if mode == "realtime":
                 assistant = await self._create_realtime_assistant()
-                logger.info("✓ Using OpenAI Realtime API (voice-to-voice)")
-            except Exception as e:
-                logger.warning(f"Realtime API unavailable ({e}), falling back to STT->LLM->TTS")
+            elif mode == "pipeline":
                 assistant = await self._create_fallback_assistant()
-                logger.info("✓ Using STT->LLM->TTS pipeline")
-            
-            # Set up event handlers
-            assistant.on("user_speech_committed", self._on_user_speech)
-            assistant.on("agent_speech_committed", self._on_agent_speech)
-            assistant.on("user_started_speaking", self._on_user_started_speaking)
-            
-            # Start the assistant
-            assistant.start(self.ctx.room, participant)
-            
-            # Initial greeting
+            else:
+                raise ValueError("VOICE_MODE must be 'realtime' or 'pipeline'")
+            self._voice_agent = Agent(instructions=self._build_system_instructions())
+            assistant.on("conversation_item_added", self._on_conversation_item_added)
+            assistant.on("close", on_close)
+            self.ctx.add_shutdown_callback(shutdown)
+            await assistant.start(
+                room=self.ctx.room,
+                agent=self._voice_agent,
+                room_options=RoomOptions(participant_identity=participant.identity),
+                record=False,
+            )
             await self._send_initial_message(assistant)
-            
-            # Wait for session to end
-            await assistant.wait_for_completion()
-            
-            # Generate and send scorecard
-            evaluation = await self._generate_scorecard()
-
+            await closed.wait()
+            if self._session_error:
+                raise RuntimeError(self._session_error)
+        except Exception as error:
+            self._session_error = str(error)
             if self.opik_tracer.enabled:
-                self.opik_tracer.log_scorecard_feedback_scores(evaluation)
-            
-            opik_output = {
-                "status": "ok",
-                "scorecard": evaluation,
-                "transcript_length": len(self.session.transcript),
-            }
-                
-        except Exception as e:
-            # Log error to Opik
-            if self.opik_tracer.enabled:
-                self.opik_tracer.log_error(e, context={
-                    "room": self.ctx.room.name,
-                    "stage": "entrypoint",
-                })
-                
-                opik_output = {
-                    "status": "error",
-                    "error_type": type(e).__name__,
-                    "error_message": str(e),
-                    "transcript_length": len(self.session.transcript),
-                }
-            
-            # Re-raise to let LiveKit handle it
+                self.opik_tracer.log_error(error, context={"stage": "voice_session"})
             raise
         finally:
-            if self.opik_tracer.enabled:
-                self.opik_tracer.end_session_trace(output=opik_output)
-    
+            try:
+                await shutdown()
+            finally:
+                self.ctx.shutdown(reason="voice session finished")
+
     async def _create_realtime_assistant(self):
-        """Create assistant using OpenAI Realtime API."""
-        voice = self.session.scenario.get('voice', self.default_voice)
-        model = openai.realtime.RealtimeModel(
-            voice=voice,
-            temperature=0.8,
-            instructions=self._build_system_instructions(),
+        """Construct the pinned SDK's speech-to-speech session without legacy adapters."""
+        return AgentSession(
+            llm=openai.realtime.RealtimeModel(
+                voice=self.session.scenario.get("voice", self.default_voice),
+            ),
+            allow_interruptions=True,
         )
-        
-        # Create assistant with barge-in/interruption handling
-        # The VoiceAssistant automatically handles interruptions:
-        # - On user speech start → cancels current TTS
-        # - On user speech start → stops current generation
-        assistant = agents.VoiceAssistant(
-            vad=agents.silero.VAD.load(),
-            stt=openai.realtime.RealtimeSTT(),
-            llm=model,
-            tts=openai.realtime.RealtimeTTS(),
-        )
-        
-        return assistant
-    
+
     async def _create_fallback_assistant(self):
-        """Create assistant using STT->LLM->TTS pipeline as fallback."""
-        # Try Deepgram for STT if available, otherwise use OpenAI Whisper
-        try:
+        """Construct the explicitly selected STT -> LLM -> TTS mode."""
+        if os.getenv("DEEPGRAM_API_KEY"):
             from livekit.plugins import deepgram
             stt = deepgram.STT()
-            logger.info("Using Deepgram for STT")
-        except Exception:
+        else:
             stt = openai.STT()
-            logger.info("Using OpenAI Whisper for STT")
-        
-        # Use OpenAI GPT-4 for LLM
-        llm = openai.LLM(
-            model="gpt-4",
-            temperature=0.8,
-        )
-        
-        # Use OpenAI TTS
-        tts = openai.TTS(
-            voice=self.session.scenario.get('voice', self.default_voice)
-        )
-        
-        # Create assistant with same interruption handling
-        assistant = agents.VoiceAssistant(
-            vad=agents.silero.VAD.load(),
+        return AgentSession(
+            vad=silero.VAD.load(),
             stt=stt,
-            llm=llm,
-            tts=tts,
+            llm=openai.LLM(model="gpt-4", temperature=0.8),
+            # The realtime voice selection is not necessarily valid for tts-1.
+            tts=openai.TTS(voice=os.getenv("FALLBACK_TTS_VOICE", "alloy")),
+            allow_interruptions=True,
         )
-        
-        # Update instructions for the fallback LLM
-        assistant.llm.chat_ctx.messages.append({
-            "role": "system",
-            "content": self._build_system_instructions()
-        })
-        
-        return assistant
-        
+
+    def _on_conversation_item_added(self, event):
+        """Record committed turns synchronously; the SDK requires sync listeners."""
+        item = event.item
+        if not isinstance(item, ChatMessage) or item.role not in ("user", "assistant"):
+            return
+        text = item.text_content
+        if not text:
+            return
+        self.session.add_transcript_entry(item.role, text)
+        task = asyncio.create_task(self._forward_conversation_item(item.role, text))
+        self._message_tasks.add(task)
+        task.add_done_callback(self._message_task_done)
+
+    def _message_task_done(self, task):
+        self._message_tasks.discard(task)
+        if not task.cancelled() and (error := task.exception()) is not None:
+            self._session_error = "Failed to process a conversation event"
+            logger.error("Conversation event failed", exc_info=error)
+
+    async def _forward_conversation_item(self, role, text):
+        if role == "user" and self.session.collecting_metadata:
+            await self._process_metadata_response(text)
+            await self._voice_agent.update_instructions(self._build_system_instructions())
+        # Keep the existing web demo's JSON data-channel contract.
+        try:
+            await self.ctx.room.local_participant.publish_data(
+                json.dumps({"type": "transcript", "role": role, "text": text}).encode(),
+                reliable=True,
+            )
+        except Exception:
+            # The participant may already have left; the local transcript is retained.
+            logger.warning("Could not forward transcript to the room", exc_info=True)
+
     async def _load_scenario_from_metadata(self):
         """Load scenario configuration from job metadata."""
-        metadata = self.ctx.job.metadata
+        metadata = self.ctx.job.metadata or self.ctx.room.metadata
         
         if metadata:
             try:
                 self.session.scenario = json.loads(metadata)
+                if not isinstance(self.session.scenario, dict):
+                    raise ValueError("Scenario metadata must be a JSON object")
                 logger.info(f"Loaded scenario from metadata: {self.session.scenario}")
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError):
                 logger.warning("Failed to parse metadata as JSON")
                 self.session.scenario = {}
         
@@ -451,39 +424,10 @@ DIFFICULTY LEVEL {difficulty:.2f} (0-1 scale):
             persona = self.session.scenario.get('persona_type', 'interviewer')
             msg = f"Let's begin. I'm your {persona.replace('_', ' ').lower()}. Are you ready?"
         
-        await assistant.say(msg)
-        self.session.add_transcript_entry("assistant", msg)
-    
-    async def _on_user_speech(self, text: str):
-        """Handle user speech."""
-        logger.info(f"User: {text}")
-        self.session.add_transcript_entry("user", text)
-        
-        # If collecting metadata, process the response
-        if self.session.collecting_metadata:
-            await self._process_metadata_response(text)
-    
-    async def _on_agent_speech(self, text: str):
-        """Handle agent speech."""
-        logger.info(f"Agent: {text}")
-        self.session.add_transcript_entry("assistant", text)
-    
-    async def _on_user_started_speaking(self):
-        """
-        Handle user interruption (barge-in).
-        
-        INTERRUPTION HANDLING:
-        When the user starts speaking while the agent is talking:
-        1. The VoiceAssistant automatically cancels current TTS output
-        2. The VoiceAssistant automatically stops current generation
-        3. This creates natural, responsive conversation
-        
-        This handler logs the interruption for analytics.
-        """
-        logger.debug("User started speaking (interruption detected)")
-        # The actual cancellation is handled automatically by VoiceAssistant
-        # We just log it here for metrics/analytics
-    
+        # generate_reply works for realtime and pipelined models; say requires TTS.
+        await assistant.generate_reply(instructions=f"Greet the participant with: {msg}")
+        # The committed conversation event records what was actually spoken.
+
     async def _process_metadata_response(self, text: str):
         """Process user response when collecting metadata."""
         field = self.session.current_question_field
@@ -547,17 +491,33 @@ DIFFICULTY LEVEL {difficulty:.2f} (0-1 scale):
         logger.info("=== SCORECARD ===")
         logger.info(report)
         
-        # Save to file for persistence
-        scorecard_file = f"scorecard_{self.ctx.room.name}.json"
-        with open(scorecard_file, 'w') as f:
-            json.dump({
-                'scenario': self.session.scenario,
-                'evaluation': evaluation,
-                'transcript': self.session.transcript
-            }, f, indent=2)
-        
-        logger.info(f"Scorecard saved to {scorecard_file}")
-        
+        # One unique, atomic file per session; room names never become paths.
+        directory = Path(os.getenv("SCORECARD_DIR", "scorecards"))
+        directory.mkdir(parents=True, exist_ok=True)
+        scorecard_file = directory / f"scorecard_{self.session_id}.json"
+        payload = {
+            "session_id": self.session_id,
+            "room": self.ctx.room.name,
+            "job_id": str(getattr(self.ctx.job, "id", "unknown")),
+            "status": "failed" if self._session_error else "completed",
+            "error": self._session_error,
+            "scenario": self.session.scenario,
+            "evaluation": evaluation,
+            "transcript": self.session.transcript,
+        }
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", dir=directory, suffix=".tmp", delete=False) as file:
+                temporary = Path(file.name)
+                json.dump(payload, file, indent=2)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temporary, scorecard_file)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        logger.info("Scorecard saved to %s", scorecard_file)
+
         return evaluation
     
     def _analyze_transcript(self) -> Dict[str, Any]:

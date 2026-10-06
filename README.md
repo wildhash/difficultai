@@ -168,7 +168,9 @@ python apps/livekit_agent/agent.py dev
 2. **Get OpenAI API key**:
    - Go to [https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)
    - Create a new API key
-   - Ensure you have access to the Realtime API (or the agent will automatically fallback to STT->LLM->TTS)
+   - Use `VOICE_MODE=realtime` for Realtime API access, or explicitly select
+     `VOICE_MODE=pipeline` for STT → LLM → TTS. Runtime provider failures are
+     surfaced; automatic provider failover is not implemented.
 
 3. **Configure `.env`**:
    ```bash

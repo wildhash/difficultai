@@ -53,3 +53,4 @@ dist-ssr/
 
 # Scorecard files
 scorecard_*.json
+scorecards/
