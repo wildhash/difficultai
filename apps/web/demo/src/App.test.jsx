@@ -94,6 +94,15 @@ describe('room lifecycle', () => {
     expect(screen.getByText(/Connected to room: pilot-room/)).toBeTruthy()
   })
 
+  it('logs malformed room data at debug level', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {})
+    render(<App />)
+    const room = connect()
+    await screen.findByText(/Session Active/)
+    act(() => room.emit('dataReceived', new TextEncoder().encode('{invalid json')))
+    expect(debug).toHaveBeenCalledWith('Ignoring malformed room data:', expect.any(SyntaxError))
+  })
+
   it('does not start a microphone when connection completes after unmount', async () => {
     const pending = deferred()
     state.connect = () => pending.promise

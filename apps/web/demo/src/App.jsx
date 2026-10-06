@@ -104,8 +104,9 @@ function App() {
               timestamp: new Date().toLocaleTimeString(),
             }])
           }
-        } catch {
+        } catch (error) {
           // Other room data is not necessarily a transcript or valid JSON.
+          console.debug('Ignoring malformed room data:', error)
         }
       })
       
