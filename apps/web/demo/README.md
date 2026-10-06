@@ -14,7 +14,7 @@ A React-based web application for interacting with the DifficultAI voice trainin
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 20+ and npm
 - DifficultAI agent running (see main README)
 - LiveKit credentials
 
@@ -22,7 +22,7 @@ A React-based web application for interacting with the DifficultAI voice trainin
 
 ```bash
 cd apps/web/demo
-npm install
+npm ci
 ```
 
 ### Development
@@ -40,6 +40,29 @@ npm run build
 ```
 
 The production build will be in the `dist/` directory.
+
+### Tests and deployment checks
+
+```bash
+npm test
+GITHUB_PAGES=true npm run build
+```
+
+The tests render the actual app with a fake LiveKit Room. They cover failed
+connections, microphone denial, cancellation/unmount races, room-name
+validation, early audio/transcripts, and reconnecting. They do not establish
+that a live voice session or the Python agent works.
+
+Pull requests run tests and build the Pages variant with read-only permissions.
+Only pushes or manual runs on `main` reach the deployment job. Before deploying,
+a repository administrator must select **Settings → Pages → Build and deployment
+→ Source: GitHub Actions**. If Configure Pages returns `Not Found`, check this
+setting and repository Pages eligibility. Build/test success is separate from
+successful publication; this workflow does not enable Pages automatically.
+
+The access token determines the actual LiveKit room. The app verifies that it
+matches the entered Room Name before publishing the microphone. A failed setup
+disconnects the room; Cancel and component cleanup also invalidate pending work.
 
 ## Usage
 
