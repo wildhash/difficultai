@@ -109,7 +109,7 @@ class DifficultAIAgent:
                             asyncio.gather(*list(self._message_tasks), return_exceptions=True),
                             timeout=5,
                         )
-                    except TimeoutError:
+                    except asyncio.TimeoutError:
                         logger.warning("Timed out forwarding final transcript events")
                 evaluation = await self._generate_scorecard()
                 finalized = True
@@ -236,7 +236,7 @@ class DifficultAIAgent:
                 if not isinstance(self.session.scenario, dict):
                     raise ValueError("Scenario metadata must be a JSON object")
                 logger.info(f"Loaded scenario from metadata: {self.session.scenario}")
-            except (json.JSONDecodeError, ValueError):
+            except ValueError:
                 logger.warning("Failed to parse metadata as JSON")
                 self.session.scenario = {}
         
