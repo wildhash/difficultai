@@ -1,11 +1,12 @@
-.PHONY: dev test smoke-test opik-smoke-test opik-eval-suite install clean help
+.PHONY: dev test smoke-test preflight-offline opik-smoke-test opik-eval-suite install clean help
 
 # Default target
 help:
 	@echo "DifficultAI LiveKit Agent - Available Commands:"
 	@echo ""
 	@echo "  make dev              - Start the LiveKit agent in development mode"
-	@echo "  make smoke-test       - Run smoke test (joins room, prints transcripts)"
+	@echo "  make smoke-test       - Check local components, storage, and LiveKit connectivity"
+	@echo "  make preflight-offline - Check local components and storage without credentials"
 	@echo "  make opik-smoke-test  - Run Opik tracing smoke test (validate observability)"
 	@echo "  make opik-eval-suite  - Run Opik scorecard evals (dataset + experiment)"
 	@echo "  make test             - Run all tests"
@@ -23,10 +24,12 @@ dev:
 	@echo "Starting DifficultAI LiveKit agent..."
 	python -m apps.livekit_agent dev
 
-# Run smoke test
+# Run preflight; live voice acceptance is a separate step.
 smoke-test:
-	@echo "Running smoke test..."
 	python apps/livekit_agent/smoke_test.py
+
+preflight-offline:
+	python apps/livekit_agent/smoke_test.py --offline
 
 # Run Opik tracing smoke test
 opik-smoke-test:
@@ -53,5 +56,4 @@ clean:
 	@echo "Cleaning up..."
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
-	find . -type f -name "scorecard_*.json" -delete
 	@echo "Clean complete"
