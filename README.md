@@ -225,6 +225,12 @@ The smoke test verifies:
 - ✓ LiveKit server is accessible
 - ✓ Agent components are functional
 
+This is a connectivity preflight, not a live voice acceptance test. It does not
+join a room, exchange audio, or verify OpenAI access. `make preflight-offline`
+checks local components and storage without credentials. Each run retains a JSON
+report under `$SCORECARD_DIR/preflight` with outcomes and the next action. See
+[preflight evidence and acceptance steps](docs/REPO_RESCUE_PREFLIGHT.md).
+
 ### Observability with Opik
 
 DifficultAI includes production-grade observability using [Opik](https://www.comet.com/opik), providing complete tracing for all sessions, LLM calls, and errors.

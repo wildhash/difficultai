@@ -1,202 +1,201 @@
-"""
-Smoke Test for DifficultAI LiveKit Agent
+"""Connectivity preflight, not an end-to-end voice acceptance test.
 
-This test:
-1. Connects to a LiveKit room
-2. Sends a test message
-3. Receives responses
-4. Prints transcripts
-5. Validates basic functionality
-
-Run with: python apps/livekit_agent/smoke_test.py
-Or: make smoke-test
+Run with ``make smoke-test`` or use ``--offline`` for local checks only.
+Reports contain check outcomes and next actions, never credentials or tokens.
 """
 
+import argparse
 import asyncio
+from datetime import datetime, timezone
+import json
+import math
 import os
-import sys
 from pathlib import Path
-from dotenv import load_dotenv
+import sys
+import tempfile
+from urllib.parse import urlsplit
+import uuid
 
-# Add parent directory to path
-parent_dir = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(parent_dir))
+# Preserve the documented direct-script entrypoint.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-# Load environment variables
-load_dotenv()
-
-print("=" * 70)
-print("DifficultAI LiveKit Agent - Smoke Test")
-print("=" * 70)
-print()
-
-# Check required environment variables
-required_vars = ["LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "OPENAI_API_KEY"]
-missing_vars = [var for var in required_vars if not os.getenv(var)]
-
-if missing_vars:
-    print("❌ SMOKE TEST FAILED: Missing required environment variables")
-    print()
-    print("Missing variables:")
-    for var in missing_vars:
-        print(f"  - {var}")
-    print()
-    print("Please set these in your .env file")
-    print("See .env.example for reference")
-    sys.exit(1)
-
-print("✓ Environment variables loaded")
-print(f"  LIVEKIT_URL: {os.getenv('LIVEKIT_URL')[:30]}...")
-print(f"  LIVEKIT_API_KEY: {os.getenv('LIVEKIT_API_KEY')[:10]}...")
-print(f"  OPENAI_API_KEY: {os.getenv('OPENAI_API_KEY')[:10]}...")
-print()
-
-try:
-    from livekit import api, rtc
-    print("✓ LiveKit SDK imported successfully")
-except ImportError as e:
-    print(f"❌ Failed to import LiveKit SDK: {e}")
-    print("Run: pip install -r requirements.txt")
-    sys.exit(1)
-
-try:
-    from apps.livekit_agent.scenario_validator import validate_scenario
-    from agents.architect import PersonaType
-    print("✓ DifficultAI modules imported successfully")
-except ImportError as e:
-    print(f"❌ Failed to import DifficultAI modules: {e}")
-    sys.exit(1)
-
-print()
-print("-" * 70)
-print("Testing Scenario Validation")
-print("-" * 70)
-
-# Test scenario validation
-test_scenario = {
-    "persona_type": "ELITE_INTERVIEWER",
-    "company": "TestCorp",
-    "role": "Software Engineer",
-    "stakes": "Smoke test scenario",
-    "user_goal": "Verify agent functionality",
-    "difficulty": 0.6  # Using 0-1 scale
+REQUIRED_VARS = ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "OPENAI_API_KEY")
+UNVERIFIED = [
+    "OpenAI provider access",
+    "Two-way live audio, interruption handling, and transcript delivery",
+    "Real-session scorecard and retention across worker replacement",
+    "Web deployment and owner acceptance",
+]
+SCENARIO = {
+    "persona_type": "ELITE_INTERVIEWER", "company": "TestCorp",
+    "role": "Software Engineer", "stakes": "Connectivity preflight",
+    "user_goal": "Verify local components", "difficulty": 0.6,
 }
 
-errors = validate_scenario(test_scenario)
-if errors:
-    print(f"❌ Scenario validation failed: {errors}")
-    sys.exit(1)
-else:
-    print("✓ Scenario validation passed")
-    print(f"  Persona: {test_scenario['persona_type']}")
-    print(f"  Difficulty: {test_scenario['difficulty']} (0-1 scale)")
 
-print()
-print("-" * 70)
-print("Testing LiveKit Connection")
-print("-" * 70)
+def environment_issues(environ):
+    issues = []
+    for name in REQUIRED_VARS:
+        value = environ.get(name, "").strip()
+        if not value or value.lower().startswith("your_"):
+            issues.append(name)
+    if "LIVEKIT_URL" not in issues:
+        url = urlsplit(environ["LIVEKIT_URL"])
+        if (url.scheme not in ("ws", "wss") or not url.hostname
+                or url.username or url.password
+                or url.hostname.startswith("your-") or url.query or url.fragment):
+            issues.append("LIVEKIT_URL")
+    return issues
 
-async def test_livekit_connection():
-    """Test basic LiveKit connection."""
-    try:
-        # Create a simple room service client
-        room_service = api.RoomServiceClient(
-            os.getenv("LIVEKIT_URL"),
-            os.getenv("LIVEKIT_API_KEY"),
-            os.getenv("LIVEKIT_API_SECRET")
-        )
-        
-        # List rooms (this validates credentials)
-        rooms = room_service.list_rooms(api.ListRoomsRequest())
-        print(f"✓ Connected to LiveKit server")
-        print(f"  Active rooms: {len(rooms.rooms)}")
-        
-        # Test token generation
-        token = api.AccessToken(
-            os.getenv("LIVEKIT_API_KEY"),
-            os.getenv("LIVEKIT_API_SECRET")
-        )
-        token.with_identity("smoke-test-user")
-        token.with_name("Smoke Test")
-        token.with_grants(api.VideoGrants(
-            room_join=True,
-            room="smoke-test-room"
-        ))
-        jwt = token.to_jwt()
-        
-        print(f"✓ Generated participant token")
-        print(f"  Token length: {len(jwt)} characters")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ LiveKit connection failed: {e}")
-        return False
 
-# Run async test
-connection_ok = asyncio.run(test_livekit_connection())
-
-if not connection_ok:
-    print()
-    print("❌ SMOKE TEST FAILED")
-    print()
-    print("Troubleshooting:")
-    print("  1. Verify LIVEKIT_URL is correct (should start with wss:// or ws://)")
-    print("  2. Check LIVEKIT_API_KEY and LIVEKIT_API_SECRET are valid")
-    print("  3. Ensure LiveKit server is accessible")
-    sys.exit(1)
-
-print()
-print("-" * 70)
-print("Testing Agent Components")
-print("-" * 70)
-
-try:
-    from agents.evaluator import EvaluatorAgent
+def check_components():
     from agents.architect import ArchitectAgent
-    
-    # Test architect
-    architect = ArchitectAgent()
-    print("✓ ArchitectAgent initialized")
-    
-    # Test evaluator
-    evaluator = EvaluatorAgent()
-    print("✓ EvaluatorAgent initialized")
-    
-    # Test evaluation with mock data
-    mock_metrics = {
-        'vague_response_count': 1,
-        'deflection_count': 0,
-        'commitments_made': 2,
-        'total_exchanges': 5,
-        'current_difficulty': 0.6,
-        'scenario_difficulty': 0.6
-    }
-    
-    evaluation = evaluator.evaluate_conversation(mock_metrics, test_scenario)
-    print("✓ Evaluation completed")
-    print(f"  Overall score: {evaluation['scores']['overall']:.1f}/100")
-    
-except Exception as e:
-    print(f"❌ Agent component test failed: {e}")
-    sys.exit(1)
+    from agents.evaluator import EvaluatorAgent
+    from apps.livekit_agent.scenario_validator import validate_scenario
+    from difficultai.scorecard import SCORECARD_DIMENSIONS
+    from livekit import api, rtc  # Verify installed SDKs without opening a connection.
 
-print()
-print("=" * 70)
-print("✅ SMOKE TEST PASSED")
-print("=" * 70)
-print()
-print("All critical components verified:")
-print("  ✓ Environment configuration")
-print("  ✓ Dependencies installed")
-print("  ✓ Scenario validation")
-print("  ✓ LiveKit connectivity")
-print("  ✓ Agent components")
-print()
-print("The agent is ready to run!")
-print()
-print("Next steps:")
-print("  1. Start the agent: make dev")
-print("  2. Create a room: python example_create_room.py")
-print("  3. Connect a client and start training")
-print()
+    ArchitectAgent()
+    if validate_scenario(SCENARIO):
+        raise ValueError("Fixture scenario failed validation")
+    evaluation = EvaluatorAgent().evaluate_conversation({
+        "vague_response_count": 1, "deflection_count": 0, "commitments_made": 2,
+        "total_exchanges": 5, "current_difficulty": 0.6, "scenario_difficulty": 0.6,
+    }, SCENARIO)
+    scores = evaluation["scores"]
+    if set(scores) != set(SCORECARD_DIMENSIONS) or any(
+        isinstance(value, bool) or not isinstance(value, (int, float))
+        or not math.isfinite(value) or not 1 <= value <= 10
+        for value in scores.values()
+    ):
+        raise ValueError("Evaluator must return six scores on the 1-10 scale")
+    if len(evaluation["feedback"]["coaching_points"]) != 3:
+        raise ValueError("Evaluator must return three coaching points")
+
+
+def check_storage(directory):
+    directory.mkdir(parents=True, exist_ok=True)
+    probe = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=directory, prefix=".preflight-", delete=False) as file:
+            probe = Path(file.name)
+            file.write(b"difficultai-storage-probe")
+            file.flush()
+            os.fsync(file.fileno())
+        if probe.read_bytes() != b"difficultai-storage-probe":
+            raise OSError("Storage readback mismatch")
+    finally:
+        if probe is not None:
+            probe.unlink(missing_ok=True)
+
+
+async def check_livekit(environ, timeout=10):
+    from livekit import api
+
+    async with api.LiveKitAPI(
+        url=environ["LIVEKIT_URL"], api_key=environ["LIVEKIT_API_KEY"],
+        api_secret=environ["LIVEKIT_API_SECRET"],
+    ) as client:
+        await asyncio.wait_for(client.room.list_rooms(api.ListRoomsRequest()), timeout=timeout)
+
+
+async def run_checks(*, offline=False):
+    checks = []
+
+    def record(name, status, detail, next_action=None):
+        checks.append({"name": name, "status": status, "detail": detail, "next_action": next_action})
+
+    for name, check, detail, action in (
+        ("components", check_components, "SDK imports, scenario, and fixture scorecard passed.",
+         "Install requirements.txt and repair the local component failure."),
+        ("storage", lambda: check_storage(Path(os.getenv("SCORECARD_DIR", "scorecards"))),
+         "Temporary file write/read passed; replacement durability remains unverified.",
+         "Configure a writable SCORECARD_DIR on persistent storage."),
+    ):
+        try:
+            check()
+            record(name, "passed", detail)
+        except Exception as error:
+            # Provider exceptions can contain URLs, tokens, or keys. Record only the type.
+            record(name, "failed", f"Check raised {type(error).__name__}.", action)
+
+    if offline:
+        record("configuration", "not_run", "Offline mode does not check credentials.")
+        record("livekit_connectivity", "not_run", "Offline mode makes no service requests.")
+    else:
+        try:
+            issues = environment_issues(os.environ)
+        except ValueError:
+            issues = ["LIVEKIT_URL"]
+        if issues:
+            record("configuration", "failed", "Missing or invalid: " + ", ".join(issues),
+                   "Configure the listed environment variables with real values and rerun.")
+            record("livekit_connectivity", "not_run", "Configuration must pass first.")
+        else:
+            record("configuration", "passed", "Required values present; OpenAI access is not tested.")
+            try:
+                await check_livekit(os.environ)
+                record("livekit_connectivity", "passed", "Authenticated LiveKit room listing succeeded.")
+            except Exception as error:
+                record("livekit_connectivity", "failed", f"Request raised {type(error).__name__}.",
+                       "Check LiveKit credentials, network access, and server availability; rerun.")
+
+    failed = [check for check in checks if check["status"] == "failed"]
+    return {
+        "schema_version": 1,
+        "run_id": uuid.uuid4().hex,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "offline" if offline else "connectivity",
+        "status": "failed" if failed else "passed",
+        "checks": checks,
+        "not_verified": list(UNVERIFIED),
+        "next_action": failed[0]["next_action"] if failed else (
+            "Configure credentials and run make smoke-test." if offline else
+            "Run one owner voice session, then restart the worker and verify its transcript and scorecard."
+        ),
+    }
+
+
+def save_report(report, directory):
+    directory.mkdir(parents=True, exist_ok=True)
+    destination = directory / f"preflight_{report['run_id']}.json"
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", dir=directory, suffix=".tmp", delete=False) as file:
+            temporary = Path(file.name)
+            json.dump(report, file, indent=2)
+            file.write("\n")
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary, destination)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return destination
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--offline", action="store_true", help="Skip credential checks and service I/O")
+    parser.add_argument("--report-dir", type=Path, help="Retain a unique JSON report for every run")
+    args = parser.parse_args(argv)
+    from dotenv import load_dotenv
+    load_dotenv()
+    report = asyncio.run(run_checks(offline=args.offline))
+    directory = args.report_dir or Path(os.getenv("SCORECARD_DIR", "scorecards")) / "preflight"
+    try:
+        save_report(report, directory)
+    except OSError as error:
+        report["status"] = "failed"
+        report["checks"].append({
+            "name": "report_storage", "status": "failed",
+            "detail": f"Report was not saved ({type(error).__name__}).",
+            "next_action": "Choose a writable report directory and rerun.",
+        })
+        report["next_action"] = "Choose a writable report directory and rerun."
+    print(json.dumps(report, indent=2))
+    return 1 if report["status"] == "failed" else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
