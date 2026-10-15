@@ -123,6 +123,23 @@ class TestPreflight(unittest.IsolatedAsyncioTestCase):
         self.assertIn("OpenAI provider access", report["not_verified"])
         self.assertIn("owner voice session", report["next_action"])
 
+    async def test_invalid_voice_mode_fails_before_service_io(self):
+        for mode in ("unsupported", "", "   ", "private-value"):
+            with self.subTest(mode=mode), patch.dict(os.environ, {"VOICE_MODE": mode}):
+                with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock) as connect:
+                    report = await smoke_test.run_checks()
+                self.assertEqual(report["status"], "failed")
+                connect.assert_not_awaited()
+                config = next(c for c in report["checks"] if c["name"] == "configuration")
+                self.assertIn("VOICE_MODE", config["detail"])
+                self.assertNotIn("private-value", json.dumps(report))
+
+    def test_voice_mode_validation_matches_worker_normalization(self):
+        for mode in ("realtime", "pipeline", " PIPELINE ", "Realtime"):
+            with self.subTest(mode=mode):
+                self.assertEqual(smoke_test.environment_issues({**ENVIRONMENT, "VOICE_MODE": mode}), [])
+        self.assertEqual(smoke_test.environment_issues(ENVIRONMENT), [])
+
     async def test_storage_failure_is_not_hidden_by_connectivity_success(self):
         with patch.object(smoke_test, "check_storage", side_effect=PermissionError("private-path")):
             with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock):
