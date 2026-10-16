@@ -36,7 +36,8 @@ SCENARIO = {
 def environment_issues(environ):
     issues = []
     # Match the worker's default and normalization before making service requests.
-    if environ.get("VOICE_MODE", "realtime").strip().lower() not in ("realtime", "pipeline"):
+    voice_mode = environ.get("VOICE_MODE", "realtime")
+    if str(voice_mode).strip().lower() not in ("realtime", "pipeline"):
         issues.append("VOICE_MODE")
     for name in REQUIRED_VARS:
         value = environ.get(name, "").strip()
@@ -131,8 +132,11 @@ async def run_checks(*, offline=False):
         except ValueError:
             issues = ["LIVEKIT_URL"]
         if issues:
+            action = "Configure the listed environment variables"
+            if "VOICE_MODE" in issues:
+                action += "; VOICE_MODE must be realtime or pipeline"
             record("configuration", "failed", "Missing or invalid: " + ", ".join(issues),
-                   "Configure the listed environment variables; VOICE_MODE must be realtime or pipeline. Rerun.")
+                   action + ". Rerun.")
             record("livekit_connectivity", "not_run", "Configuration must pass first.")
         else:
             record("configuration", "passed", "Required values present; OpenAI access is not tested.")
