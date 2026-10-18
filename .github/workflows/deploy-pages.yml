@@ -71,6 +71,9 @@ jobs:
       # Requires Settings -> Pages -> Source: GitHub Actions (see demo README).
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          token: ${{ secrets.PAGES_ENABLEMENT_TOKEN || github.token }}
+          enablement: true
 
       - name: Deploy to GitHub Pages
         id: deployment
