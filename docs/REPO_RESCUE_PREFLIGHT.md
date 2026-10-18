@@ -89,6 +89,43 @@ No sale, customer acceptance, or revenue is represented by this repair.
 
 ## Resume the next development cycle
 
+### 2026-10-15: reject an unusable voice mode before connectivity
+
+Baseline: `00e78e256929c5aac6e8f85d9577b25d2ee8a46c` (merged PR #9).
+No open PRs or issues were present in DifficultAI, RepoMan, or make_my_day.
+The latest [Pages attempt](https://github.com/wildhash/difficultai/actions/runs/38682007426)
+built successfully but failed Configure Pages with `Not Found`; deployment was
+skipped. No rerun was requested because configuration access has not changed.
+
+Diagnosis: connectivity preflight ignored `VOICE_MODE`, while the worker rejects
+anything except normalized `realtime` or `pipeline`. With `VOICE_MODE=unsupported`
+and fixture credentials, substituted component/network checks produced `passed`,
+called the LiveKit check once, and recommended an owner session that could not
+start. This is a local regression reproduction, not a successful provider call.
+
+Decision: validate the mode in the existing configuration gate rather than change
+the worker's accepted modes or silently fall back to a different provider path.
+Missing mode retains the realtime default; whitespace and case follow the worker.
+Invalid values are not echoed, and LiveKit I/O is skipped. Offline mode still
+explicitly skips configuration and cannot establish configured readiness.
+
+Verification: 66 Python tests passed (64 existing plus two regression tests),
+worker CLI imports passed, and offline preflight passed. A separate substituted-I/O
+probe covered nine valid/invalid/default cases. The first full-suite attempt had
+one environment error from missing SOCKS support; installing the already documented
+optional `httpx[socks]` extra locally resolved it. No dependency pins changed.
+The PR #9 dotenv review concern was checked against installed python-dotenv 1.2.1:
+`load_dotenv` itself honors `PYTHON_DOTENV_DISABLED`; no redundant guard was added.
+
+Limitations: no live audio, provider access, replacement durability, deployment,
+owner acceptance, payment, or revenue was verified. Web code was not changed or
+retested in this cycle. Next executable owner action remains enabling Pages with
+GitHub Actions, then verifying a deployment; next voice acceptance requires the
+configured environment and persistent storage described above.
+
+Rollback: revert only the voice-mode validation repair commit. This restores the
+preflight blind spot but does not alter scorecards, worker behavior, or cleanup.
+
 1. Read this record and the latest repository/CI state; distinguish historical
    observations from fresh evidence. Do not repeat the same blocked deployment
    without changed configuration or access.
