@@ -54,11 +54,14 @@ validation, early audio/transcripts, and reconnecting. They do not establish
 that a live voice session or the Python agent works.
 
 Pull requests run tests and build the Pages variant with read-only permissions.
-Only pushes or manual runs on `main` reach the deployment job. Before deploying,
-a repository administrator must select **Settings → Pages → Build and deployment
-→ Source: GitHub Actions**. If Configure Pages returns `Not Found`, check this
-setting and repository Pages eligibility. Build/test success is separate from
-successful publication; this workflow does not enable Pages automatically.
+Only pushes or manual runs on `main` reach the deployment job. Configure Pages
+tries to enable Pages automatically; if the repository does not have Pages
+enabled, add a repository secret named `PAGES_ENABLEMENT_TOKEN` with access to
+manage Pages. The token must have the repository's Pages write permission (or
+the `repo` scope for a personal access token). Without that secret, the default
+`GITHUB_TOKEN` can deploy an already-enabled site but cannot enable Pages.
+Repository Pages eligibility and successful publication still depend on GitHub
+repository settings. Build/test success is separate from publication success.
 
 The access token determines the actual LiveKit room. The app verifies that it
 matches the entered Room Name before publishing the microphone. A failed setup
