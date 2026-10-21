@@ -126,6 +126,33 @@ configured environment and persistent storage described above.
 Rollback: revert only the voice-mode validation repair commit. This restores the
 preflight blind spot but does not alter scorecards, worker behavior, or cleanup.
 
+### 2026-10-20: distinguish documentation publication from demo deployment
+
+Baseline: `2d3182ac7c3b79e4b60a4d5de5812df008c290f6` (merged PR #11).
+The repository Pages workflow
+[39314009903](https://github.com/wildhash/difficultai/actions/runs/39314009903)
+published successfully at <https://wildhash.github.io/difficultai/>. A fresh HTTP
+request returned status 200. The result is nevertheless the Jekyll-rendered
+repository README, not the Vite app under `apps/web/demo`.
+
+Diagnosis: a green Pages deployment proves that an artifact was published, but
+not that the intended application was selected. The successful build rendered
+the repository with Jekyll and uploaded `_site`; the custom Web demo workflow's
+latest main run still failed before deploying `apps/web/demo/dist`.
+
+Decision: do not change application code or claim owner acceptance. Select
+**Settings → Pages → Build and deployment → Source: GitHub Actions**, then run
+the existing **Web demo CI and Pages** workflow. Accept deployment only after the
+public root loads the demo HTML and its versioned JavaScript and CSS assets.
+
+Verification: CI logs show successful Jekyll build and publication, and an HTTP
+fetch confirms the live documentation page. No LiveKit/OpenAI session, voice
+quality, transcript, scorecard, worker-replacement persistence, customer
+acceptance, payment, or revenue was verified.
+
+Rollback: revert this documentation-only record if later evidence disproves it.
+Changing or reverting documentation does not alter the Pages source setting.
+
 1. Read this record and the latest repository/CI state; distinguish historical
    observations from fresh evidence. Do not repeat the same blocked deployment
    without changed configuration or access.
