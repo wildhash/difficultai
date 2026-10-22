@@ -21,7 +21,13 @@ test('verifies the app marker and same-origin versioned assets', async () => {
   const fetchImpl = async (input) => {
     const url = input instanceof URL ? input.href : input
     requested.push(url)
-    return { ok: true, status: 200, text: async () => appHtml }
+    const contentType = url.endsWith('.css') ? 'text/css' : 'application/javascript'
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': contentType }),
+      text: async () => appHtml,
+    }
   }
 
   const assets = await verifyDeployment('https://example.test/difficultai/', fetchImpl)
@@ -36,11 +42,40 @@ test('fails when a referenced app asset is unavailable', async () => {
   const fetchImpl = async (input) => {
     const url = input instanceof URL ? input.href : input
     if (url.endsWith('.css')) return { ok: false, status: 404 }
-    return { ok: true, status: 200, text: async () => appHtml }
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/javascript' }),
+      text: async () => appHtml,
+    }
   }
 
   await assert.rejects(
     verifyDeployment('https://example.test/difficultai/', fetchImpl),
     /index-def456\.css returned HTTP 404/,
+  )
+})
+
+test('rejects an HTML fallback returned for a missing asset', async () => {
+  const fetchImpl = async (input) => {
+    const url = input instanceof URL ? input.href : input
+    if (url.endsWith('.css')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+      }
+    }
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/javascript' }),
+      text: async () => appHtml,
+    }
+  }
+
+  await assert.rejects(
+    verifyDeployment('https://example.test/difficultai/', fetchImpl),
+    /index-def456\.css served unexpected content-type text\/html/,
   )
 })

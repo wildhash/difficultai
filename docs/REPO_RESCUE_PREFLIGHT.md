@@ -172,10 +172,11 @@ then fetches those assets. The verifier retries briefly for Pages propagation.
 Unit regressions cover the current documentation false-positive, the expected
 app, and a missing asset. This does not change the application or Pages setting.
 
-Verification: all 10 component tests and three deployment-verifier regressions
+Verification: all 10 component tests and four deployment-verifier regressions
 passed. The Pages-mode production build passed and retained the existing 500 kB
-chunk warning. Its local preview passed the new gate with both versioned assets;
-the current public documentation page was rejected as the wrong artifact.
+chunk warning. A locally served Pages-shaped artifact passed the new gate with
+both versioned assets; the current public documentation page was rejected as the
+wrong artifact. The gate also rejects an HTTP-200 HTML fallback for an asset.
 
 Limitations: this gate does not prove microphone access, LiveKit/OpenAI service,
 voice quality, transcript/scorecard creation, replacement-storage durability,
