@@ -153,6 +153,42 @@ acceptance, payment, or revenue was verified.
 Rollback: revert this documentation-only record if later evidence disproves it.
 Changing or reverting documentation does not alter the Pages source setting.
 
+### 2026-10-22: make artifact identity a deployment gate
+
+Baseline: `484eae943fd4790b4430d197df42396c853749a7` (merged PR #12).
+The automatic [Pages run 39672698390](https://github.com/wildhash/difficultai/actions/runs/39672698390)
+after that merge succeeded, but its build job again used Jekyll. A fresh request
+returned HTTP 200 with Jekyll metadata and repository documentation, not the Vite
+owner-pilot application.
+
+Diagnosis: status and publication checks alone cannot distinguish the intended
+application from the wrong successful artifact. Waiting for the Pages source
+setting is necessary, but leaves the workflow able to report green without an
+explicit application-identity and asset-availability acceptance check.
+
+Decision: add a post-deployment verifier to the existing workflow. It requires
+the DifficultAI demo title plus same-origin, versioned JavaScript and CSS assets,
+then fetches those assets. The verifier retries briefly for Pages propagation.
+Unit regressions cover the current documentation false-positive, the expected
+app, and a missing asset. This does not change the application or Pages setting.
+
+Verification: all 10 component tests and four deployment-verifier regressions
+passed. The Pages-mode production build passed and retained the existing 500 kB
+chunk warning. A locally served Pages-shaped artifact passed the new gate with
+both versioned assets; the current public documentation page was rejected as the
+wrong artifact. The gate also rejects an HTTP-200 HTML fallback for an asset.
+
+Limitations: this gate does not prove microphone access, LiveKit/OpenAI service,
+voice quality, transcript/scorecard creation, replacement-storage durability,
+owner acceptance, customer acceptance, payment, or revenue.
+
+Next executable owner action: select **Settings → Pages → Build and deployment →
+Source: GitHub Actions**, then run **Web demo CI and Pages**. The workflow must
+pass its new post-deployment verification before the app is called deployed.
+
+Rollback: revert this repair commit to remove only the artifact-identity gate;
+it does not change application data, provider configuration, or Pages settings.
+
 1. Read this record and the latest repository/CI state; distinguish historical
    observations from fresh evidence. Do not repeat the same blocked deployment
    without changed configuration or access.

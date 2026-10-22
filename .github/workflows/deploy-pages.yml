@@ -68,6 +68,14 @@ jobs:
     timeout-minutes: 10
     needs: build
     steps:
+      - name: Checkout deployment verifier
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       # Requires Settings -> Pages -> Source: GitHub Actions (see demo README).
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -78,3 +86,9 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Verify deployed owner-pilot app
+        working-directory: apps/web/demo
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: npm run verify:deployment -- "$PAGE_URL"
