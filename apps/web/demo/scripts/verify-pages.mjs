@@ -2,11 +2,9 @@ import { pathToFileURL } from 'node:url'
 
 const EXPECTED_TITLE = '<title>DifficultAI - Voice Training Demo</title>'
 
-class DeploymentMismatchError extends Error {}
-
 export function findAppAssets(html, pageUrl) {
   if (!html.includes(EXPECTED_TITLE)) {
-    throw new DeploymentMismatchError('deployed page is not the DifficultAI owner-pilot app')
+    throw new Error('deployed page is not the DifficultAI owner-pilot app')
   }
 
   const references = [
@@ -21,13 +19,15 @@ export function findAppAssets(html, pageUrl) {
   const extensions = new Set(assets.map((url) => url.pathname.split('.').pop()))
 
   if (!extensions.has('js') || !extensions.has('css')) {
-    throw new DeploymentMismatchError('deployed app is missing its versioned JavaScript or CSS asset')
+    throw new Error('deployed app is missing its versioned JavaScript or CSS asset')
   }
   return [...new Map(assets.map((url) => [url.href, url])).values()]
 }
 
-export async function verifyDeployment(pageUrl, fetchImpl = fetch) {
-  const page = await fetchImpl(pageUrl, {
+export async function verifyDeployment(pageUrl, fetchImpl = fetch, cacheBust = Date.now()) {
+  const verificationUrl = new URL(pageUrl)
+  verificationUrl.searchParams.set('repo-rescue-verify', String(cacheBust))
+  const page = await fetchImpl(verificationUrl, {
     cache: 'no-store',
     signal: AbortSignal.timeout(15_000),
   })
@@ -47,12 +47,33 @@ export async function verifyDeployment(pageUrl, fetchImpl = fetch) {
       ? /^text\/css(?:;|$)/i.test(contentType)
       : /(?:java|ecma)script/i.test(contentType)
     if (!validType) {
-      throw new DeploymentMismatchError(
+      throw new Error(
         `${asset.pathname} served unexpected content-type ${contentType || '(missing)'}`,
       )
     }
   }
   return assets.map((asset) => asset.href)
+}
+
+export async function verifyWithRetry(pageUrl, options = {}) {
+  const {
+    attempts = 6,
+    delayMs = 10_000,
+    fetchImpl = fetch,
+    cacheBust = () => Date.now(),
+    onRetry = () => {},
+  } = options
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await verifyDeployment(pageUrl, fetchImpl, cacheBust())
+    } catch (error) {
+      if (attempt === attempts) throw error
+      onRetry(error, attempt)
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+  throw new Error('deployment verification exhausted without a result')
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
@@ -62,17 +83,11 @@ if (isMain) {
     console.error('usage: npm run verify:deployment -- <page-url>')
     process.exitCode = 2
   } else {
-    const attempts = 6
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      try {
-        const assets = await verifyDeployment(pageUrl)
-        console.log(`verified owner-pilot app and ${assets.length} assets at ${pageUrl}`)
-        break
-      } catch (error) {
-        if (error instanceof DeploymentMismatchError || attempt === attempts) throw error
+    const assets = await verifyWithRetry(pageUrl, {
+      onRetry: (error, attempt) => {
         console.log(`verification attempt ${attempt} failed: ${error.message}; retrying`)
-        await new Promise((resolve) => setTimeout(resolve, 10_000))
-      }
-    }
+      },
+    })
+    console.log(`verified owner-pilot app and ${assets.length} assets at ${pageUrl}`)
   }
 }
