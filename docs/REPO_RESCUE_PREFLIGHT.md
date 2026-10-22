@@ -172,7 +172,7 @@ then fetches those assets. The verifier retries briefly for Pages propagation.
 Unit regressions cover the current documentation false-positive, the expected
 app, and a missing asset. This does not change the application or Pages setting.
 
-Verification: all 10 component tests and four deployment-verifier regressions
+Verification: all 10 component tests and five deployment-verifier regressions
 passed. The Pages-mode production build passed and retained the existing 500 kB
 chunk warning. A locally served Pages-shaped artifact passed the new gate with
 both versioned assets; the current public documentation page was rejected as the
@@ -188,6 +188,15 @@ pass its new post-deployment verification before the app is called deployed.
 
 Rollback: revert this repair commit to remove only the artifact-identity gate;
 it does not change application data, provider configuration, or Pages settings.
+
+Post-merge evidence revised one conclusion. [Run 39806370378](https://github.com/wildhash/difficultai/actions/runs/39806370378)
+built and deployed the Vite artifact successfully, then the gate immediately saw
+the prior Jekyll page. A cache-busting request after propagation returned the app
+title and both versioned assets. Therefore a title mismatch can be transient at
+the deployment boundary. The follow-up repair cache-busts each page request and
+retries this demonstrated stale-documentation state; a regression models the
+stale page transitioning to the app. The static owner-pilot shell is deployed,
+but live voice, persistent scorecards, and owner acceptance remain unverified.
 
 1. Read this record and the latest repository/CI state; distinguish historical
    observations from fresh evidence. Do not repeat the same blocked deployment
