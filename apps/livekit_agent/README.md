@@ -188,6 +188,13 @@ the default directory is ignored by Git. Configure a persistent volume for
 retention across worker/container replacement. This file store does not provide
 authenticated customer retrieval or managed backups.
 
+For a replacement-durability check, retain the worker's session ID, replace or
+restart the worker with the same persistent volume, then run
+`make verify-scorecard SESSION_ID=<session-id>`. The command reports only schema
+and completion checks; it never prints private transcript or scenario content.
+Treat it as storage evidence only when it runs after a real replacement, and
+record owner acceptance separately.
+
 ## Development
 
 ### Testing

@@ -212,3 +212,41 @@ but live voice, persistent scorecards, and owner acceptance remain unverified.
 Rollback: revert this PR's commit. This restores the previous smoke-test entrypoint
 and CI behavior; reverting also restores `make clean`'s scorecard deletion, so do
 not run that older clean target against retained session data.
+
+### 2026-10-23: make replacement evidence verifiable without transcript disclosure
+
+Baseline: `1b424407a0dbe11cc675b09930d954195f9e36db` (merged PR #14).
+The static owner-pilot shell remains deployed and its exact-main workflow is
+green. There are no open PRs or issues in DifficultAI, RepoMan, or make_my_day.
+LiveKit/OpenAI credentials and an explicit persistent `SCORECARD_DIR` are absent
+from this execution environment, so a live session or replacement test cannot
+be claimed.
+
+Diagnosis: the runbook required manually verifying a private transcript and
+scorecard after worker replacement, but provided no privacy-safe executable
+check. Direct inspection risks disclosing session contents, while file existence
+alone would accept a failed or one-way session.
+
+Decision: add a read-only retained-scorecard verifier. It accepts only the
+worker's 32-character session ID, reads only its expected filename, and emits a
+sanitized report. It requires a completed session without a recorded error,
+non-empty user and assistant turns, all six finite 1-10 scores, and three
+coaching points. It does not expose the room, job, scenario, transcript, error,
+or storage path.
+
+Verification: five verifier regressions cover a valid retained scorecard, a
+missing file, failed/one-way evidence, traversal-shaped input, and sanitized CLI
+output. All 71 Python tests and the offline preflight passed. The first full-suite
+attempt reproduced the documented local SOCKS transport dependency; installing
+the optional `httpx[socks]` extra resolved it without changing project pins.
+
+Limitations: fixtures do not prove provider access, live audio, a real worker
+replacement, persistent storage, owner acceptance, payment, or revenue.
+
+Next executable step: configure LiveKit/OpenAI and a persistent `SCORECARD_DIR`,
+complete one owner session, record its session ID, replace the worker with that
+volume mounted, and run `make verify-scorecard SESSION_ID=<session-id>` before
+recording owner acceptance separately.
+
+Rollback: revert the verifier commit. This removes only the read-only command,
+tests, and documentation; it does not alter or delete saved scorecards.
