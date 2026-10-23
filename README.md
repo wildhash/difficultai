@@ -231,6 +231,18 @@ checks local components and storage without credentials. Each run retains a JSON
 report under `$SCORECARD_DIR/preflight` with outcomes and the next action. See
 [preflight evidence and acceptance steps](docs/REPO_RESCUE_PREFLIGHT.md).
 
+After a real owner session, record the worker's 32-character session ID, replace
+or restart the worker with the same persistent volume mounted, and run:
+
+```bash
+make verify-scorecard SESSION_ID=<session-id>
+```
+
+The verifier checks completion, two-way transcript structure, and the six-score
+evaluation contract without printing the private transcript, scenario, room, or
+provider error. A pass proves retention only if the worker was actually replaced;
+it does not prove audio quality or owner acceptance.
+
 ### Observability with Opik
 
 DifficultAI includes production-grade observability using [Opik](https://www.comet.com/opik), providing complete tracing for all sessions, LLM calls, and errors.
