@@ -234,9 +234,9 @@ non-empty user and assistant turns, all six finite 1-10 scores, and three
 coaching points. It does not expose the room, job, scenario, transcript, error,
 or storage path.
 
-Verification: five verifier regressions cover a valid retained scorecard, a
-missing file, failed/one-way evidence, traversal-shaped input, and sanitized CLI
-output. All 71 Python tests and the offline preflight passed. The first full-suite
+Verification: seven verifier regressions cover a valid retained scorecard, a
+missing file, failed/one-way evidence, non-object and null-feedback payloads,
+traversal-shaped input, and sanitized CLI output. All 73 Python tests and the offline preflight passed. The first full-suite
 attempt reproduced the documented local SOCKS transport dependency; installing
 the optional `httpx[socks]` extra resolved it without changing project pins.
 

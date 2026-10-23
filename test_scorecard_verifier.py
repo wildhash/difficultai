@@ -68,6 +68,20 @@ class TestScorecardVerifier(unittest.TestCase):
         failed = {check["name"] for check in report["checks"] if check["status"] == "failed"}
         self.assertEqual(failed, {"completion", "two_way_transcript"})
 
+    def test_non_object_root_returns_sanitized_failure(self):
+        self.write(["private malformed content"])
+        report = verify_scorecard.verify_scorecard(self.directory, self.session_id)
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["checks"][-1]["name"], "scorecard_schema")
+        self.assertNotIn("private malformed content", json.dumps(report))
+
+    def test_null_feedback_returns_sanitized_failure(self):
+        self.payload["evaluation"]["feedback"] = None
+        self.write()
+        report = verify_scorecard.verify_scorecard(self.directory, self.session_id)
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["checks"][-1]["name"], "evaluation")
+
     def test_invalid_id_does_not_read_arbitrary_path(self):
         report = verify_scorecard.verify_scorecard(self.directory, "../private")
         self.assertEqual(report["status"], "failed")

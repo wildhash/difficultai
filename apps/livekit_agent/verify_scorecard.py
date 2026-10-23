@@ -8,8 +8,10 @@ from pathlib import Path
 import re
 import sys
 
-# Preserve the documented direct-script entrypoint.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+# Preserve the documented direct-script entrypoint without shadowing installed modules.
+ROOT = str(Path(__file__).resolve().parents[2])
+if ROOT not in sys.path:
+    sys.path.append(ROOT)
 
 from difficultai.scorecard import SCORECARD_DIMENSIONS
 
@@ -36,6 +38,9 @@ def verify_scorecard(directory: Path, session_id: str) -> dict:
         return _report(session_id, checks)
 
     record("scorecard_file", True, "Scorecard JSON is readable after restart.")
+    if not isinstance(payload, dict):
+        record("scorecard_schema", False, "Scorecard root must be a JSON object.")
+        return _report(session_id, checks)
     record("identity", payload.get("session_id") == session_id, "Stored session ID matches the requested session.")
 
     completed = payload.get("status") == "completed" and payload.get("error") in (None, "")
@@ -60,7 +65,8 @@ def verify_scorecard(directory: Path, session_id: str) -> dict:
         and math.isfinite(value) and 1 <= value <= 10
         for value in scores.values()
     )
-    coaching = evaluation.get("feedback", {}).get("coaching_points") if isinstance(evaluation, dict) else None
+    feedback = evaluation.get("feedback") if isinstance(evaluation, dict) else None
+    coaching = feedback.get("coaching_points") if isinstance(feedback, dict) else None
     evaluation_valid = scores_valid and isinstance(coaching, list) and len(coaching) == 3
     record("evaluation", evaluation_valid, "Evaluation has six 1-10 scores and three coaching points.")
     return _report(session_id, checks)
