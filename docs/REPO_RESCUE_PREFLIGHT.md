@@ -250,3 +250,19 @@ recording owner acceptance separately.
 
 Rollback: revert the verifier commit. This removes only the read-only command,
 tests, and documentation; it does not alter or delete saved scorecards.
+
+Post-merge deployment evidence changed the diagnosis. The successful automatic
+[Pages run 39982479976](https://github.com/wildhash/difficultai/actions/runs/39982479976)
+for merge `e22d174` republished the Jekyll repository page because the custom
+Vite workflow ignored Python/documentation-only pushes. A fresh cache-busted
+request returned `Difficult AI | difficultai`, not the owner-pilot app.
+
+Repair decision: run the custom build, deploy, and artifact-identity gate on
+every `main` push. Keep pull-request path filtering so unrelated PRs do not run
+the web suite twice. This closes the demonstrated route by which non-web merges
+could silently replace a previously verified deployment. The exact repair head
+must pass the web tests/build in PR CI; after merge, both the deployment workflow
+and a fresh public fetch must show the Vite app before deployment is restored.
+
+Rollback: revert only the workflow-trigger repair, understanding that this
+reopens the demonstrated Jekyll-overwrite failure on later non-web merges.
