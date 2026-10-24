@@ -243,6 +243,17 @@ evaluation contract without printing the private transcript, scenario, room, or
 provider error. A pass proves retention only if the worker was actually replaced;
 it does not prove audio quality or owner acceptance.
 
+For the owner pilot, copy scenario JSON from the deployed app into a local file
+and create the configured room plus a short-lived participant token with:
+
+```bash
+make owner-session SCENARIO=owner-scenario.json
+```
+
+Paste the emitted LiveKit URL, room name, and access token into the app. Keep the
+output local because it contains a bearer token. The launcher uses the current
+pinned LiveKit SDK and stores the scenario as room metadata for the worker.
+
 ### Observability with Opik
 
 DifficultAI includes production-grade observability using [Opik](https://www.comet.com/opik), providing complete tracing for all sessions, LLM calls, and errors.
