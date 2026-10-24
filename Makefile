@@ -1,4 +1,4 @@
-.PHONY: dev test smoke-test preflight-offline verify-scorecard opik-smoke-test opik-eval-suite install clean help
+.PHONY: dev test smoke-test preflight-offline owner-session verify-scorecard opik-smoke-test opik-eval-suite install clean help
 
 # Default target
 help:
@@ -7,6 +7,7 @@ help:
 	@echo "  make dev              - Start the LiveKit agent in development mode"
 	@echo "  make smoke-test       - Check local components, storage, and LiveKit connectivity"
 	@echo "  make preflight-offline - Check local components and storage without credentials"
+	@echo "  make owner-session SCENARIO=<file> - Create a configured owner-pilot room and token"
 	@echo "  make verify-scorecard SESSION_ID=<id> - Verify retained owner-session evidence"
 	@echo "  make opik-smoke-test  - Run Opik tracing smoke test (validate observability)"
 	@echo "  make opik-eval-suite  - Run Opik scorecard evals (dataset + experiment)"
@@ -31,6 +32,10 @@ smoke-test:
 
 preflight-offline:
 	python apps/livekit_agent/smoke_test.py --offline
+
+owner-session:
+	@test -n "$(SCENARIO)" || (echo "SCENARIO is required" >&2; exit 2)
+	python apps/livekit_agent/create_owner_session.py --scenario-file "$(SCENARIO)"
 
 verify-scorecard:
 	@test -n "$(SESSION_ID)" || (echo "SESSION_ID is required" >&2; exit 2)

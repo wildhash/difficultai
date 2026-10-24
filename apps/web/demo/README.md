@@ -93,39 +93,21 @@ disconnects the room; Cancel and component cleanup also invalidate pending work.
 
 To connect directly, you need a LiveKit access token. You can generate tokens using:
 
-### Python (Recommended)
+### Python owner-pilot launcher (Recommended)
 
-Create a simple token server:
+Copy the scenario JSON from the web app into a local file such as
+`owner-scenario.json`, configure the three LiveKit environment variables, then
+run the checked-in launcher:
 
-```python
-from livekit import api
-import os
-
-def generate_token(room_name, participant_name="user"):
-    token = api.AccessToken(
-        os.getenv("LIVEKIT_API_KEY"),
-        os.getenv("LIVEKIT_API_SECRET")
-    )
-    token.with_identity(participant_name)
-    token.with_name(participant_name)
-    token.with_grants(api.VideoGrants(
-        room_join=True,
-        room=room_name,
-        can_publish=True,
-        can_subscribe=True,
-    ))
-    return token.to_jwt()
-
-if __name__ == "__main__":
-    room = input("Room name: ")
-    print("\nAccess Token:")
-    print(generate_token(room))
-```
-
-Run:
 ```bash
-python generate_token.py
+make owner-session SCENARIO=owner-scenario.json
 ```
+
+The command creates a uniquely named room with the scenario attached as room
+metadata and emits the LiveKit URL, room name, and a 30-minute participant token
+for the three connection fields in the web app. The output contains a bearer
+token; keep it local and never commit or share it. This CLI is for the owner
+pilot. A public product still needs an authenticated backend that issues tokens.
 
 ### JavaScript/Node.js
 

@@ -266,3 +266,43 @@ and a fresh public fetch must show the Vite app before deployment is restored.
 
 Rollback: revert only the workflow-trigger repair, understanding that this
 reopens the demonstrated Jekyll-overwrite failure on later non-web merges.
+
+### 2026-10-24: make the configured owner session executable
+
+Baseline: `00b9e45837fc3c785693455464cbb480ed659018` (merged PR #16).
+The deployed Vite app and versioned assets remain reachable. There are no open
+PRs or issues in DifficultAI, RepoMan, or make_my_day. LiveKit/OpenAI credentials
+and persistent scorecard storage remain absent from this execution environment.
+
+Diagnosis: the recommended Python direct-connection instructions call
+`livekit.api.RoomServiceClient`, which is absent from the pinned SDK. Generating
+a participant token alone also does not attach the scenario configured in the
+web app; the worker reads scenario JSON from room metadata. Therefore the
+documented owner path could not create the configured session it described.
+
+Decision: add an executable owner-pilot launcher using `LiveKitAPI` as an async
+context manager. It validates the scenario and connection configuration, creates
+a uniquely named room with canonical scenario metadata, and emits a participant
+token limited to that room for 30 minutes by default. Names and token lifetime
+are bounded. Provider failures report only their exception type. The output is
+explicitly sensitive and must remain local. A public token service remains a
+separate authenticated-backend requirement.
+
+Verification: targeted regressions cover room metadata, room-scoped token claims,
+client closure, invalid configuration before provider I/O, remote plaintext
+rejection, token failure before room creation, conflicting reused-room metadata,
+bounded identifiers and lifetime, malformed scenarios, and sanitized provider
+failures. The full Python suite and offline
+preflight must pass before merge. No provider request is made by tests.
+
+Limitations: this repair does not prove credentials, worker deployment, live
+audio, transcript delivery, scorecard retention across replacement, owner or
+customer acceptance, payment, or revenue.
+
+Next executable step: configure LiveKit/OpenAI and persistent `SCORECARD_DIR`,
+run `make owner-session SCENARIO=owner-scenario.json`, connect through the
+deployed app, complete one session, replace the worker, then run the retained
+scorecard verifier and record owner acceptance separately.
+
+Rollback: revert the owner-session launcher commit. It removes only the CLI,
+tests, and documentation; it does not change or delete rooms or scorecards.
