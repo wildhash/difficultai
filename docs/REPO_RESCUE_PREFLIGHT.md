@@ -289,8 +289,10 @@ explicitly sensitive and must remain local. A public token service remains a
 separate authenticated-backend requirement.
 
 Verification: targeted regressions cover room metadata, room-scoped token claims,
-client closure, invalid configuration before provider I/O, bounded identifiers
-and lifetime, and malformed scenarios. The full Python suite and offline
+client closure, invalid configuration before provider I/O, remote plaintext
+rejection, token failure before room creation, conflicting reused-room metadata,
+bounded identifiers and lifetime, malformed scenarios, and sanitized provider
+failures. The full Python suite and offline
 preflight must pass before merge. No provider request is made by tests.
 
 Limitations: this repair does not prove credentials, worker deployment, live

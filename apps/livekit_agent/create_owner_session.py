@@ -40,6 +40,8 @@ def configuration_issues(environ: dict) -> list[str]:
         if (parsed.scheme not in ("ws", "wss") or not parsed.hostname
                 or parsed.username or parsed.password or parsed.query or parsed.fragment):
             issues.append("LIVEKIT_URL")
+        elif parsed.scheme == "ws" and parsed.hostname not in ("localhost", "127.0.0.1", "::1"):
+            issues.append("LIVEKIT_URL")
     return issues
 
 
@@ -58,6 +60,20 @@ async def create_session(*, scenario: dict, room_name: str, identity: str,
         raise ValueError("Token lifetime must be between 5 and 120 minutes")
 
     metadata = json.dumps(scenario, separators=(",", ":"), sort_keys=True)
+    token = (
+        api.AccessToken(environ["LIVEKIT_API_KEY"], environ["LIVEKIT_API_SECRET"])
+        .with_identity(identity)
+        .with_name("DifficultAI owner pilot")
+        .with_ttl(timedelta(minutes=ttl_minutes))
+        .with_grants(api.VideoGrants(
+            room_join=True,
+            room=room_name,
+            can_publish=True,
+            can_subscribe=True,
+            can_publish_data=True,
+        ))
+        .to_jwt()
+    )
     async with api.LiveKitAPI(
         url=environ["LIVEKIT_URL"],
         api_key=environ["LIVEKIT_API_KEY"],
@@ -67,21 +83,8 @@ async def create_session(*, scenario: dict, room_name: str, identity: str,
             name=room_name,
             metadata=metadata,
         ))
-
-    token = (
-        api.AccessToken(environ["LIVEKIT_API_KEY"], environ["LIVEKIT_API_SECRET"])
-        .with_identity(identity)
-        .with_name("DifficultAI owner pilot")
-        .with_ttl(timedelta(minutes=ttl_minutes))
-        .with_grants(api.VideoGrants(
-            room_join=True,
-            room=room.name,
-            can_publish=True,
-            can_subscribe=True,
-            can_publish_data=True,
-        ))
-        .to_jwt()
-    )
+        if room.name != room_name or room.metadata != metadata:
+            raise ValueError("Room already exists with different metadata; choose another --room")
     return {
         "schema_version": 1,
         "livekit_url": environ["LIVEKIT_URL"],
@@ -124,7 +127,7 @@ def main(argv=None):
     except Exception as error:
         print(json.dumps({
             "status": "failed",
-            "error": f"LiveKit session creation failed ({type(error).__name__}).",
+            "error": f"Session bootstrap failed ({type(error).__name__}).",
         }))
         return 1
 

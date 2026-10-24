@@ -37,7 +37,10 @@ SCENARIO = {
 class TestOwnerSession(unittest.IsolatedAsyncioTestCase):
     async def test_creates_room_metadata_and_scoped_short_lived_token(self):
         room_service = SimpleNamespace(create_room=AsyncMock(
-            return_value=SimpleNamespace(name="owner-room"),
+            return_value=SimpleNamespace(
+                name="owner-room",
+                metadata=json.dumps(SCENARIO, separators=(",", ":"), sort_keys=True),
+            ),
         ))
         client = SimpleNamespace(room=room_service)
         manager = Mock(__aenter__=AsyncMock(return_value=client),
@@ -79,6 +82,50 @@ class TestOwnerSession(unittest.IsolatedAsyncioTestCase):
                     environ={"LIVEKIT_URL": "https://wrong", "LIVEKIT_API_KEY": "key"},
                 )
         livekit.assert_not_called()
+
+    async def test_rejects_remote_plaintext_transport(self):
+        with patch.object(api, "LiveKitAPI") as livekit:
+            with self.assertRaisesRegex(ValueError, "LIVEKIT_URL"):
+                await owner_session.create_session(
+                    scenario=SCENARIO,
+                    room_name="owner-room",
+                    identity="owner-user",
+                    ttl_minutes=30,
+                    environ={**ENVIRONMENT, "LIVEKIT_URL": "ws://remote.example"},
+                )
+        livekit.assert_not_called()
+
+    async def test_token_failure_does_not_create_room(self):
+        with patch.object(api, "AccessToken", side_effect=RuntimeError("local failure")):
+            with patch.object(api, "LiveKitAPI") as livekit:
+                with self.assertRaisesRegex(RuntimeError, "local failure"):
+                    await owner_session.create_session(
+                        scenario=SCENARIO,
+                        room_name="owner-room",
+                        identity="owner-user",
+                        ttl_minutes=30,
+                        environ=ENVIRONMENT,
+                    )
+        livekit.assert_not_called()
+
+    async def test_rejects_reused_room_with_different_metadata(self):
+        room_service = SimpleNamespace(create_room=AsyncMock(
+            return_value=SimpleNamespace(name="owner-room", metadata='{"company":"Old"}'),
+        ))
+        manager = Mock(
+            __aenter__=AsyncMock(return_value=SimpleNamespace(room=room_service)),
+            __aexit__=AsyncMock(return_value=False),
+        )
+        with patch.object(api, "LiveKitAPI", return_value=manager):
+            with self.assertRaisesRegex(ValueError, "different metadata"):
+                await owner_session.create_session(
+                    scenario=SCENARIO,
+                    room_name="owner-room",
+                    identity="owner-user",
+                    ttl_minutes=30,
+                    environ=ENVIRONMENT,
+                )
+        manager.__aexit__.assert_awaited_once()
 
     async def test_rejects_unsafe_names_and_long_tokens(self):
         for room, identity, ttl in (("../room", "owner", 30), ("room", "owner/name", 30), ("room", "owner", 121)):
