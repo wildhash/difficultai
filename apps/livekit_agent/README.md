@@ -195,6 +195,13 @@ and completion checks; it never prints private transcript or scenario content.
 Treat it as storage evidence only when it runs after a real replacement, and
 record owner acceptance separately.
 
+After the owner personally judges the live audio, run
+`make record-owner-acceptance SESSION_ID=<session-id> DECISION=accepted
+AUDIO_QUALITY=acceptable` (or record a rejection). The command requires a valid
+retained scorecard, stores no notes or transcript text, refuses to overwrite an
+existing decision for that session, and labels the result as a manual owner
+self-attestation rather than independent acceptance or commercial evidence.
+
 ## Development
 
 ### Testing
