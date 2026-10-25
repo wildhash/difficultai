@@ -306,3 +306,35 @@ scorecard verifier and record owner acceptance separately.
 
 Rollback: revert the owner-session launcher commit. It removes only the CLI,
 tests, and documentation; it does not change or delete rooms or scorecards.
+
+### 2026-10-25: make owner acceptance explicit and auditable
+
+Baseline: `8cb2dadf61f8b871d37c589c003264dc0fb31d0f` (merged PR #17).
+The Vite pilot remains deployed and no repository has competing open work.
+Credentials and persistent runtime storage remain unavailable here, so a live
+session cannot be fabricated or inferred from local fixtures.
+
+Diagnosis: the runbook ended with “record owner acceptance separately,” but had
+no executable format or gate. A free-form note could be confused with verified
+session evidence, expose private content, or claim acceptance after a failed or
+one-way session.
+
+Decision: add an immutable owner self-attestation command. It first requires the
+privacy-safe retained-scorecard verifier to pass, requires an explicit accepted
+or rejected decision and live-audio judgment, and stores no transcript, scenario,
+free-form notes, room, provider error, or credentials. An accepted decision is
+invalid when audio is marked unacceptable. The record labels itself as manually
+recorded and explicitly excludes customer, payment, and revenue claims.
+
+Verification: five targeted regressions cover a minimal private record, file
+permissions and no overwrite, rejection of failed evidence, accepted/audio
+consistency, rejected outcomes, and sanitized CLI output. The full Python suite
+and offline preflight must pass before merge. Fixtures do not establish live
+audio, replacement durability, owner acceptance, customers, payments, or revenue.
+
+Next executable step: configure LiveKit/OpenAI and persistent `SCORECARD_DIR`,
+launch and complete one owner session, replace the worker, verify the retained
+scorecard, then personally record the owner decision with the new command.
+
+Rollback: revert the acceptance-record commit. Existing scorecards and any
+previously written acceptance records remain untouched.
