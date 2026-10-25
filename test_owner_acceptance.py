@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from apps.livekit_agent.record_owner_acceptance import main, record_acceptance
 from difficultai.scorecard import SCORECARD_DIMENSIONS
@@ -74,6 +75,23 @@ class OwnerAcceptanceTests(unittest.TestCase):
             self.directory, SESSION_ID, "rejected", "unacceptable"
         )
         self.assertEqual(result["decision"], "rejected")
+
+    def test_rejects_naive_timestamp(self):
+        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+            record_acceptance(
+                self.directory, SESSION_ID, "accepted", "acceptable",
+                now=datetime(2026, 10, 25, 15, 0),
+            )
+
+    def test_exclusive_fallback_supports_volumes_without_hard_links(self):
+        with patch("apps.livekit_agent.record_owner_acceptance.os.link",
+                   side_effect=OSError("unsupported")):
+            result = record_acceptance(
+                self.directory, SESSION_ID, "accepted", "acceptable"
+            )
+        destination = self.directory / "acceptance" / f"owner_acceptance_{SESSION_ID}.json"
+        self.assertEqual(json.loads(destination.read_text()), result)
+        self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
 
     def test_cli_output_is_sanitized(self):
         output = io.StringIO()

@@ -32,7 +32,10 @@ def record_acceptance(directory: Path, session_id: str, decision: str,
     if destination.exists():
         raise FileExistsError("An owner acceptance record already exists for this session")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    timestamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    timestamp = now or datetime.now(timezone.utc)
+    if timestamp.tzinfo is None:
+        raise ValueError("Acceptance timestamp must be timezone-aware")
+    timestamp = timestamp.astimezone(timezone.utc)
     record = {
         "schema_version": 1,
         "evidence_type": "owner_self_attestation",
@@ -58,7 +61,19 @@ def record_acceptance(directory: Path, session_id: str, decision: str,
         os.chmod(temporary, 0o600)
         # A hard link publishes the fully flushed file without overwriting a
         # decision that may have appeared after the existence check.
-        os.link(temporary, destination)
+        try:
+            os.link(temporary, destination)
+        except FileExistsError:
+            raise
+        except OSError:
+            # Some persistent volumes do not support hard links. O_EXCL keeps
+            # the fallback non-overwriting, though publication is not atomic.
+            with open(temporary, "rb") as source:
+                handle = os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                with os.fdopen(handle, "wb") as target:
+                    target.write(source.read())
+                    target.flush()
+                    os.fsync(target.fileno())
         os.unlink(temporary)
     except BaseException:
         try:

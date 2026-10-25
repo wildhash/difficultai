@@ -326,9 +326,10 @@ free-form notes, room, provider error, or credentials. An accepted decision is
 invalid when audio is marked unacceptable. The record labels itself as manually
 recorded and explicitly excludes customer, payment, and revenue claims.
 
-Verification: five targeted regressions cover a minimal private record, file
-permissions and no overwrite, rejection of failed evidence, accepted/audio
-consistency, rejected outcomes, and sanitized CLI output. The full Python suite
+Verification: seven targeted regressions cover a minimal private record, file
+permissions and no overwrite, volumes without hard links, timezone handling,
+rejection of failed evidence, accepted/audio consistency, rejected outcomes,
+and sanitized CLI output. The full Python suite
 and offline preflight must pass before merge. Fixtures do not establish live
 audio, replacement durability, owner acceptance, customers, payments, or revenue.
 
