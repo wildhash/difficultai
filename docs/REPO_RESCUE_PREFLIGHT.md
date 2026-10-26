@@ -339,3 +339,40 @@ scorecard, then personally record the owner decision with the new command.
 
 Rollback: revert the acceptance-record commit. Existing scorecards and any
 previously written acceptance records remain untouched.
+
+### 2026-10-26: make worker deployment reproducible without losing evidence
+
+Baseline: `68c251e6e516d699166ef0f5c8d20dd8fd97e467` (merged PR #18).
+The static pilot remains deployed, all three repositories have no open work,
+and credentialed voice operation remains unavailable in this environment.
+
+Diagnosis: the deployment guide recommended the obsolete
+`livekit-cli deploy create` interface and embedded a Dockerfile that was never
+checked in. More materially, it paired the worker's local-file scorecards with
+a managed deployment whose local storage is ephemeral. That path could not
+support the required replacement-retention evidence.
+
+Alternatives: external object/database storage would support managed workers but
+requires a new authenticated storage design. For the first owner pilot, use the
+smaller existing file-store architecture on a self-hosted worker container with
+a named volume while continuing to use LiveKit Cloud for rooms and media.
+
+Decision: check in a non-root worker image, a credential-excluding build context,
+and an owner-pilot Compose definition that mounts `difficultai-scorecards` at the
+same absolute path configured by `SCORECARD_DIR`. Update deployment commands to
+the current `lk agent create` / `lk agent deploy` interface and record a rollback
+that preserves the volume.
+
+Verification: three configuration regressions validate the production entrypoint,
+unprivileged runtime, credential exclusions, and exact scorecard-volume mapping.
+The full Python suite and offline preflight must pass before merge. Docker is not
+available in this execution environment, so an image build and container start
+remain unverified; no credential, provider request, live audio, replacement,
+owner acceptance, customer, payment, or revenue evidence is claimed.
+
+Next executable step: on a Docker host, configure `.env`, build and start
+`compose.owner-pilot.yml`, run connectivity preflight inside the worker, then
+complete the owner-session/replacement/verification/attestation sequence.
+
+Rollback: restore the prior Docker and Compose files from a known-good commit
+and rebuild without deleting the `difficultai-scorecards` volume.

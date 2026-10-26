@@ -90,16 +90,17 @@ python apps/livekit_agent/agent.py dev
 
 1. **Create a LiveKit Cloud account** at https://cloud.livekit.io
 
-2. **Set up your agent**:
+2. **Set up a managed agent**:
    ```bash
-   # Build and deploy using LiveKit Cloud CLI
-   livekit-cli deploy create \
-     --name difficultai-agent \
-     --runtime python \
-     --entrypoint apps/livekit_agent/agent.py
+   lk cloud auth
+   lk agent create --secrets-file .env
    ```
 
 3. **Configure environment variables** in the LiveKit Cloud dashboard
+
+Managed-agent local storage is ephemeral and therefore does not satisfy this
+pilot's scorecard replacement test. Use `compose.owner-pilot.yml` with its named
+volume, or implement external durable storage, before claiming retention.
 
 ### Self-Hosted LiveKit Server
 
@@ -107,37 +108,22 @@ python apps/livekit_agent/agent.py dev
 
 2. **Run the agent** as a service:
    ```bash
-   # Using systemd or docker-compose
-   python apps/livekit_agent/agent.py start
+   docker compose -f compose.owner-pilot.yml up -d --build
    ```
 
 ## Scenario Configuration
 
 ### Via Metadata (Recommended)
 
-When creating a room, pass scenario configuration as JSON metadata:
+Use the checked-in launcher so the validated scenario is attached to room
+metadata through the pinned SDK:
 
-```python
-import livekit
-from livekit import api
-
-# Create room with metadata
-room_service = api.RoomServiceClient()
-room = room_service.create_room(
-    api.CreateRoomRequest(
-        name="training-session-123",
-        metadata=json.dumps({
-            "persona_type": "ELITE_INTERVIEWER",
-            "company": "TechCorp",
-            "role": "Senior Software Engineer",
-            "stakes": "Final round interview for $250k position",
-            "user_goal": "Demonstrate technical expertise and secure job offer",
-            "difficulty": 4,
-            "voice": "marin"
-        })
-    )
-)
+```bash
+make owner-session SCENARIO=owner-scenario.json
 ```
+
+The command emits a short-lived participant token for that exact room. Keep its
+output local because it contains a bearer token.
 
 ### Conversational Collection
 
