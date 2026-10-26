@@ -8,7 +8,40 @@ This guide covers deploying the DifficultAI LiveKit voice agent to production.
 - LiveKit server (Cloud or self-hosted)
 - Python 3.9+
 
-## Option 1: LiveKit Cloud (Recommended)
+## Owner-pilot deployment decision
+
+The checked-in worker writes private scorecards to `SCORECARD_DIR`. LiveKit
+Cloud agent containers provide ephemeral local storage, so deploying the worker
+there does not establish scorecard retention across replacement. For the owner
+pilot, run the worker container on infrastructure where the checked-in named
+volume is retained. It can still connect to a LiveKit Cloud project for rooms
+and media transport.
+
+```bash
+cp .env.example .env
+# Fill in LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, and OPENAI_API_KEY.
+docker compose -f compose.owner-pilot.yml build
+docker compose -f compose.owner-pilot.yml up -d
+docker compose -f compose.owner-pilot.yml logs -f worker
+```
+
+The image runs `python -m apps.livekit_agent start` as an unprivileged user and
+stores evidence at `/data/scorecards`, backed by the
+`difficultai-scorecards` volume. Never commit `.env` or the volume contents.
+After a real session, retain its session ID, recreate the worker, verify the
+scorecard, and record owner acceptance as described in the README.
+
+Rollback the worker without deleting evidence:
+
+```bash
+docker compose -f compose.owner-pilot.yml down
+git checkout <known-good-commit> -- Dockerfile compose.owner-pilot.yml
+docker compose -f compose.owner-pilot.yml up -d --build
+```
+
+Do not add `--volumes` to `docker compose down`; that deletes the named volume.
+
+## Option 1: LiveKit Cloud managed agent
 
 LiveKit Cloud provides managed infrastructure for running agents.
 
@@ -39,18 +72,17 @@ DEFAULT_VOICE=marin
 
 ### 4. Deploy the Agent
 
-#### Using LiveKit Cloud CLI
+#### Using the current LiveKit CLI
 
 ```bash
-# Install LiveKit CLI
-pip install livekit-cli
+# Install and authenticate the `lk` CLI using LiveKit's official instructions.
+lk cloud auth
 
-# Deploy the agent
-livekit-cli deploy create \
-  --name difficultai-agent \
-  --runtime python \
-  --entrypoint apps/livekit_agent/agent.py \
-  --env-file .env
+# First deployment; this creates livekit.toml.
+lk agent create --secrets-file .env
+
+# Later versions.
+lk agent deploy
 ```
 
 #### Manual Deployment
@@ -64,10 +96,10 @@ livekit-cli deploy create \
 
 ```bash
 # Check agent status
-livekit-cli deploy list
+lk agent status
 
 # View logs
-livekit-cli deploy logs difficultai-agent
+lk agent logs
 ```
 
 ## Option 2: Self-Hosted
@@ -134,20 +166,8 @@ sudo systemctl status difficultai-agent
 
 #### Using Docker
 
-Create `Dockerfile`:
-
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-CMD ["python", "apps/livekit_agent/agent.py", "start"]
-```
+Use the checked-in `Dockerfile`; it starts the supported module entrypoint as an
+unprivileged user.
 
 Build and run:
 ```bash
@@ -155,21 +175,14 @@ docker build -t difficultai-agent .
 docker run -d \
   --name difficultai-agent \
   --env-file .env \
+  --mount type=volume,src=difficultai-scorecards,dst=/data/scorecards \
   difficultai-agent
 ```
 
 #### Using Docker Compose
 
-```yaml
-version: '3.8'
-services:
-  agent:
-    build: .
-    env_file: .env
-    restart: unless-stopped
-    depends_on:
-      - livekit
-```
+Use `compose.owner-pilot.yml`. It connects to the `LIVEKIT_URL` in `.env`; a
+separately hosted LiveKit server is required only when that URL is self-hosted.
 
 ### 3. Configure Reverse Proxy (Optional)
 
@@ -207,7 +220,7 @@ server {
 View agent logs:
 ```bash
 # LiveKit Cloud
-livekit-cli deploy logs difficultai-agent
+lk agent logs
 
 # systemd
 sudo journalctl -u difficultai-agent -f
@@ -236,13 +249,10 @@ The agent automatically reconnects if disconnected. Monitor for:
 
 ### Horizontal Scaling
 
-Run multiple agent instances:
+After the owner pilot passes, run multiple self-hosted worker instances with:
 
 ```bash
-# Each instance handles rooms independently
-python apps/livekit_agent/agent.py start --instance-id 1 &
-python apps/livekit_agent/agent.py start --instance-id 2 &
-python apps/livekit_agent/agent.py start --instance-id 3 &
+docker compose -f compose.owner-pilot.yml up -d --scale worker=3
 ```
 
 ### Load Balancing

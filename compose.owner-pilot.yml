@@ -1,0 +1,17 @@
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      SCORECARD_DIR: /data/scorecards
+      OPIK_DISABLED: "1"
+    restart: unless-stopped
+    stop_grace_period: 15m
+    volumes:
+      - difficultai-scorecards:/data/scorecards
+
+volumes:
+  difficultai-scorecards:
