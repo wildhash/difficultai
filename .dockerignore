@@ -11,3 +11,9 @@ apps/web/demo/node_modules
 apps/web/demo/dist
 scorecards
 *.log
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+build
+dist
