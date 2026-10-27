@@ -7,6 +7,10 @@ on:
       - '**.py'
       - 'requirements.txt'
       - 'Makefile'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'compose.owner-pilot.yml'
+      - 'scripts/verify-worker-image.sh'
       - '.github/workflows/python-tests.yml'
   pull_request:
     branches: [main]
@@ -14,6 +18,10 @@ on:
       - '**.py'
       - 'requirements.txt'
       - 'Makefile'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'compose.owner-pilot.yml'
+      - 'scripts/verify-worker-image.sh'
       - '.github/workflows/python-tests.yml'
 
 permissions:
@@ -47,3 +55,11 @@ jobs:
           name: offline-preflight-${{ github.sha }}
           path: scorecards/preflight/*.json
           if-no-files-found: ignore
+
+  worker-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify replacement-volume contract
+        run: scripts/verify-worker-image.sh "difficultai-owner-pilot:${{ github.sha }}"

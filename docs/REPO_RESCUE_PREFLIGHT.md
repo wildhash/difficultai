@@ -376,3 +376,38 @@ complete the owner-session/replacement/verification/attestation sequence.
 
 Rollback: restore the prior Docker and Compose files from a known-good commit
 and rebuild without deleting the `difficultai-scorecards` volume.
+
+### 2026-10-27: execute the worker image and replacement-volume contract in CI
+
+Baseline: `aba84cd3f1d2f708b7284fde9467cf1f0fa0dd3f` (merged PR #19).
+The static pilot remains deployed and all three repositories have no competing
+open work. LiveKit/OpenAI credentials remain unavailable here.
+
+Diagnosis: the checked-in Docker and Compose contracts had only source-level
+assertions. This environment has no Docker runtime, so neither the production
+image nor its named-volume behavior had ever executed. Repeating a local build
+was impossible and would not create durable, reviewable evidence.
+
+Alternatives: provision a new Docker host, which adds an unmanaged operational
+dependency, or use the repository's existing Linux CI runner. The latter is the
+smallest reproducible check and requires no credentials or paid service.
+
+Decision: add a CI gate that builds the exact worker image, asserts it runs as a
+non-root user, imports the supported worker CLI, writes a clearly labeled
+fixture through the scorecard mount, and reads it from a second container using
+the same temporary named volume. The script always removes that test volume.
+
+Verification: the full Python suite, offline preflight, and exact-head CI must
+pass. CI is the authoritative image-build evidence because Docker is absent
+locally. The volume payload is an internal fixture; it is not a scorecard.
+
+Limitations: this does not prove a deployed worker, provider credentials, live
+audio, a real scorecard surviving host or worker replacement, owner acceptance,
+customers, verified payment, or revenue.
+
+Next executable step: on the intended Docker host, configure the four required
+credentials, start `compose.owner-pilot.yml`, run connectivity preflight, then
+complete the owner-session/replacement/verification/attestation sequence.
+
+Rollback: revert the CI verification commit. It affects only tests, workflow,
+and documentation and does not alter a deployed worker or retained evidence.
