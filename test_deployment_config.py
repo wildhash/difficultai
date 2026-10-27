@@ -1,6 +1,7 @@
 """Regression checks for the owner-pilot worker deployment contract."""
 
 from pathlib import Path
+import stat
 import unittest
 
 
@@ -32,6 +33,16 @@ class DeploymentConfigTests(unittest.TestCase):
         exclusions = set(path.read_text(encoding="utf-8").splitlines())
         for required in (".env", ".env.*", "scorecards", ".git", ".venv", "node_modules"):
             self.assertIn(required, exclusions)
+
+    def test_ci_executes_worker_image_and_replacement_volume_check(self):
+        script = ROOT / "scripts" / "verify-worker-image.sh"
+        workflow = ROOT / ".github" / "workflows" / "python-tests.yml"
+        self.assertTrue(script.is_file(), f"Missing image verification: {script}")
+        self.assertTrue(script.stat().st_mode & stat.S_IXUSR, "Verification script must be executable")
+        contents = script.read_text(encoding="utf-8")
+        self.assertIn('docker build --tag "$image" .', contents)
+        self.assertEqual(contents.count('docker run --rm --volume "$volume:/data/scorecards"'), 2)
+        self.assertIn('scripts/verify-worker-image.sh "difficultai-owner-pilot:${{ github.sha }}"', workflow.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
