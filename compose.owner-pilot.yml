@@ -1,5 +1,6 @@
 services:
   worker:
+    image: ${DIFFICULTAI_IMAGE:-difficultai-owner-pilot:latest}
     build:
       context: .
       dockerfile: Dockerfile

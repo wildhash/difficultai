@@ -28,10 +28,13 @@ docker compose -f compose.owner-pilot.yml logs -f worker
 The image runs `python -m apps.livekit_agent start` as an unprivileged user and
 stores evidence at `/data/scorecards`, backed by the
 `difficultai-scorecards` volume. Never commit `.env` or the volume contents.
-The Python CI workflow runs `scripts/verify-worker-image.sh` to build this exact
-image, confirm its runtime user and CLI, and prove a fixture remains readable by
-a replacement container on one named volume. That is deployment-contract
-evidence only; it does not establish a running worker or retained live scorecard.
+The Python CI workflow runs `scripts/verify-worker-image.sh` through this exact
+Compose service. It validates the Compose model, builds the image, confirms its
+runtime user and CLI, runs the offline preflight inside the service, and proves
+a fixture remains readable by a replacement container on its configured named
+volume. The check uses an isolated Compose project and deletes its fixture
+volume. This is deployment-contract evidence only; it does not establish a
+running worker or retained live scorecard.
 After a real session, retain its session ID, recreate the worker, verify the
 scorecard, and record owner acceptance as described in the README.
 

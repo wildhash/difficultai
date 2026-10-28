@@ -411,3 +411,40 @@ complete the owner-session/replacement/verification/attestation sequence.
 
 Rollback: revert the CI verification commit. It affects only tests, workflow,
 and documentation and does not alter a deployed worker or retained evidence.
+
+### 2026-10-28: verify the actual Compose deployment path
+
+Baseline: `52846a1df8456ce00e24e88f0c6f5b26eb92c1be` (merged PR #20).
+All three repositories have no competing open work, the Vite pilot remains
+deployed, and LiveKit/OpenAI credentials remain unavailable here.
+
+Diagnosis: the image CI built the Dockerfile and verified a raw Docker named
+volume, but it did not parse or run `compose.owner-pilot.yml`. The operator path
+could therefore drift or fail while the lower-level image check stayed green.
+
+Alternatives: keep static string assertions around Compose, or execute the real
+service definition without provider I/O. The executable check provides stronger
+evidence and can safely use placeholder credentials because offline preflight
+makes no service requests.
+
+Decision: make the existing CI verifier create an isolated Compose project,
+validate its rendered configuration, build its explicitly tagged worker image,
+run the non-root and CLI checks plus offline preflight inside the service, then
+write and read a labeled fixture from replacement service containers. Cleanup
+deletes only the isolated test volume and never replaces an existing `.env`.
+
+Verification: the full Python suite, offline preflight, shell syntax, and the
+exact-head Compose CI job must pass before merge. The stored payload is still an
+internal fixture, not a real owner-session scorecard.
+
+Limitations: this does not deploy the worker or verify provider credentials,
+live audio, a real scorecard across replacement, owner acceptance, customers,
+verified payment, or revenue.
+
+Next executable step: configure the four credentials on the intended Docker
+host, start the checked-in Compose service, run credentialed connectivity
+preflight, then complete the owner-session/replacement/verification/attestation
+sequence.
+
+Rollback: revert the Compose-verification commit. No production container or
+retained evidence is created or modified by this CI-only change.

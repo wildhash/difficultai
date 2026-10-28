@@ -24,6 +24,7 @@ class DeploymentConfigTests(unittest.TestCase):
         compose = " ".join(path.read_text(encoding="utf-8").split())
         self.assertIn("SCORECARD_DIR: /data/scorecards", compose)
         self.assertIn("difficultai-scorecards:/data/scorecards", compose)
+        self.assertIn("image: ${DIFFICULTAI_IMAGE:-difficultai-owner-pilot:latest}", compose)
         self.assertIn("- .env", compose)
         self.assertIn("restart: unless-stopped", compose)
 
@@ -39,10 +40,14 @@ class DeploymentConfigTests(unittest.TestCase):
         workflow = ROOT / ".github" / "workflows" / "python-tests.yml"
         self.assertTrue(script.is_file(), f"Missing image verification: {script}")
         self.assertTrue(script.stat().st_mode & stat.S_IXUSR, "Verification script must be executable")
-        contents = script.read_text(encoding="utf-8")
-        self.assertIn('docker build --tag "$image" .', contents)
-        self.assertEqual(contents.count('docker run --rm --volume "$volume:/data/scorecards"'), 2)
-        self.assertIn('scripts/verify-worker-image.sh "difficultai-owner-pilot:${{ github.sha }}"', workflow.read_text(encoding="utf-8"))
+        contents = " ".join(script.read_text(encoding="utf-8").split())
+        self.assertIn('docker compose --project-name "$project"', contents)
+        self.assertIn("$compose config --quiet", contents)
+        self.assertIn("$compose build", contents)
+        self.assertGreaterEqual(contents.count("$compose run --rm --no-deps worker"), 5)
+        self.assertIn("python -m apps.livekit_agent.smoke_test --offline", contents)
+        self.assertIn("down --volumes --remove-orphans", contents)
+        self.assertIn("scripts/verify-worker-image.sh", workflow.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
