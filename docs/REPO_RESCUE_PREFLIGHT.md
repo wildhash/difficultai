@@ -448,3 +448,41 @@ sequence.
 
 Rollback: revert the Compose-verification commit. No production container or
 retained evidence is created or modified by this CI-only change.
+
+### 2026-10-29: fail closed before starting the owner-pilot worker
+
+Baseline: `1da9a35e5bf9c4cb2ea77052026d26392c46a477` (merged PR #21).
+All three repositories have no competing open work, the static pilot remains
+deployed, and the four LiveKit/OpenAI credentials are still unavailable here.
+
+Diagnosis: the runbook built and started the long-running Compose worker before
+running credentialed connectivity preflight. Invalid or placeholder credentials
+could therefore produce a restart-looping service that looked deployed without
+passing its minimum reachable operational gate.
+
+Alternatives: rely on the operator to run commands in the right order, or encode
+the order in a tested command. The latter makes failure behavior reproducible
+and reduces the owner action to one auditable entrypoint.
+
+Decision: add `make owner-pilot-deploy`. It requires a local `.env`, validates
+Compose, builds the worker, and runs the existing credentialed LiveKit preflight
+inside a one-off service before starting the long-running worker. It then checks
+that the service remains running. A failed preflight never starts the worker; a
+failed post-start status check stops only the worker and preserves its volume.
+Errors remain sanitized and no credential values are read or printed directly.
+
+Verification: regressions cover missing configuration before Docker access,
+preflight failure before startup, successful command ordering, and fail-closed
+startup/status handling without volume removal. The full Python suite, offline
+preflight, and exact-head CI must pass before merge.
+
+Limitations: tests mock the operational command sequence. This does not deploy a
+worker or verify real credentials, OpenAI access, live audio, retained session
+evidence, owner acceptance, customers, verified payment, or revenue.
+
+Next executable step: put the four credentials in `.env` on the intended Docker
+host and run `make owner-pilot-deploy`; only after it passes should the owner
+complete the session/replacement/verification/attestation sequence.
+
+Rollback: revert the deployment-gate commit. It does not delete the named volume
+or alter previously retained evidence.
