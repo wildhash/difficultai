@@ -4,11 +4,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        DIFFICULTAI_BUILD_SHA: ${DIFFICULTAI_BUILD_SHA:-unverified}
     env_file:
       - .env
     environment:
       SCORECARD_DIR: /data/scorecards
       OPIK_DISABLED: "1"
+      DIFFICULTAI_BUILD_SHA: ${DIFFICULTAI_BUILD_SHA:-unverified}
     restart: unless-stopped
     stop_grace_period: 15m
     volumes:

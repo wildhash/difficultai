@@ -110,6 +110,7 @@ class TestVoiceLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(files), 1)
         payload = json.loads(files[0].read_text())
         self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["source_revision"], "unverified")
         self.assertEqual(payload["room"], "../../same-room")
         self.assertEqual(len(payload["transcript"]), 2)
         original = files[0].read_bytes()

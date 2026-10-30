@@ -17,6 +17,7 @@ SESSION_ID = "a" * 32
 def valid_scorecard(session_id=SESSION_ID):
     return {
         "session_id": session_id,
+        "source_revision": "1" * 40,
         "status": "completed",
         "error": None,
         "scenario": {"private": "omitted from acceptance"},
@@ -51,6 +52,7 @@ class OwnerAcceptanceTests(unittest.TestCase):
         self.assertEqual(json.loads(destination.read_text()), record)
         self.assertEqual(record["evidence_type"], "owner_self_attestation")
         self.assertTrue(record["retained_scorecard_verified"])
+        self.assertEqual(record["source_revision"], "1" * 40)
         self.assertNotIn("transcript", destination.read_text())
         self.assertNotIn("scenario", destination.read_text())
         self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
@@ -104,7 +106,9 @@ class OwnerAcceptanceTests(unittest.TestCase):
         rendered = output.getvalue()
         self.assertNotIn("private user turn", rendered)
         self.assertNotIn(str(self.directory), rendered)
-        self.assertEqual(json.loads(rendered)["status"], "recorded")
+        result = json.loads(rendered)
+        self.assertEqual(result["status"], "recorded")
+        self.assertEqual(result["source_revision"], "1" * 40)
 
 
 if __name__ == "__main__":

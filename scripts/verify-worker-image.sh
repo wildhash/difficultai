@@ -32,6 +32,8 @@ EOF
 fi
 
 export DIFFICULTAI_IMAGE="$image"
+DIFFICULTAI_BUILD_SHA="$(git rev-parse --verify HEAD)"
+export DIFFICULTAI_BUILD_SHA
 compose="docker compose --project-name $project --file compose.owner-pilot.yml"
 $compose config --quiet
 $compose build
@@ -40,6 +42,9 @@ $compose build
 # the Dockerfile and expose the supported LiveKit worker CLI.
 $compose run --rm --no-deps worker sh -c 'test "$(id -u)" -ne 0'
 $compose run --rm --no-deps worker python -m apps.livekit_agent --help >/dev/null
+$compose run --rm --no-deps worker python -c \
+  "import os,sys; sys.exit(os.environ.get('DIFFICULTAI_BUILD_SHA') != sys.argv[1])" \
+  "$DIFFICULTAI_BUILD_SHA"
 $compose run --rm --no-deps worker \
   python -m apps.livekit_agent.smoke_test --offline >/dev/null
 

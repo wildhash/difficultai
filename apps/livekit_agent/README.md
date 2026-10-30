@@ -189,6 +189,13 @@ retained scorecard, stores no notes or transcript text, refuses to overwrite an
 existing decision for that session, and labels the result as a manual owner
 self-attestation rather than independent acceptance or commercial evidence.
 
+`make owner-pilot-deploy` must run from a clean Git checkout. It binds the
+image and worker environment to the exact 40-character commit SHA and verifies
+that identity after startup. Each new scorecard records that public source
+revision; scorecard verification and owner acceptance fail closed when the
+revision is absent or malformed. Existing private transcript content remains
+inside the configured scorecard volume.
+
 ## Development
 
 ### Testing

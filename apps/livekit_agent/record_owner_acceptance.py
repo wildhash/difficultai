@@ -37,9 +37,10 @@ def record_acceptance(directory: Path, session_id: str, decision: str,
         raise ValueError("Acceptance timestamp must be timezone-aware")
     timestamp = timestamp.astimezone(timezone.utc)
     record = {
-        "schema_version": 1,
+        "schema_version": 2,
         "evidence_type": "owner_self_attestation",
         "session_id": session_id,
+        "source_revision": evidence["source_revision"],
         "decision": decision,
         "live_audio_quality": audio_quality,
         "recorded_at": timestamp.isoformat().replace("+00:00", "Z"),
@@ -103,6 +104,7 @@ def main(argv=None):
     print(json.dumps({
         "status": "recorded",
         "session_id": result["session_id"],
+        "source_revision": result["source_revision"],
         "decision": result["decision"],
         "evidence_type": result["evidence_type"],
         "limitations": result["limitations"],
