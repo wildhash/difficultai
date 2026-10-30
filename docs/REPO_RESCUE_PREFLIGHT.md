@@ -564,3 +564,30 @@ Pages run and its chained Vite run, then verify the public app without cache.
 
 Rollback: revert this workflow commit. The prior deployment artifact remains
 available in Actions, and no worker, credential, or scorecard is modified.
+
+### 2026-10-30 revision: wait for the dynamic Pages run
+
+Evidence after merging PR #24 invalidated its proposed solution: the automatic
+Pages workflow succeeded for merge commit `adf2520f900f1186c317be5daf115e9f16460e34`,
+but no `workflow_run` event started the expected follow-up. GitHub represents
+this legacy publication as a dynamic workflow, so the trigger was not executable
+in this repository.
+
+Decision: remove the ineffective trigger. On each `main` push, the deploy job
+uses read-only Actions access to find the matching dynamic run by exact commit
+SHA, waits until it is terminal, and only then publishes and verifies Vite. A
+30-second discovery bound lets repositories already configured for GitHub
+Actions proceed; a five-minute completion bound fails closed instead of racing.
+
+Verification: Node regressions cover waiting for the exact dynamic run, ignoring
+another commit, the dormant/no-run path, and API failure. The parsed workflow
+regression requires read-only Actions permissions and the wait step. After merge,
+both publications must finish, the push deployment must finish last, and a fresh
+public fetch must expose Vite's title and JavaScript/CSS assets.
+
+Limitations and next step remain unchanged for the voice pilot: this deployment
+repair does not verify credentials, live audio, persistent real scorecards, or
+owner acceptance. After static verification, run the credentialed owner pilot.
+
+Rollback: revert the serialization commit to restore the prior deployment
+behavior; this touches no credentials, workers, or retained scorecards.

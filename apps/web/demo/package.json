@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "vitest run && node --test scripts/verify-pages.node.mjs",
+    "test": "vitest run && node --test scripts/*.node.mjs",
     "verify:deployment": "node scripts/verify-pages.mjs",
     "build": "vite build",
     "preview": "vite preview"

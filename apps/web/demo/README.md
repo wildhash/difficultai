@@ -55,11 +55,11 @@ that a live voice session or the Python agent works.
 
 Pull requests run tests and build the Pages variant with read-only permissions.
 Pushes or manual runs on `main` reach the deployment job. While the repository
-retains its legacy branch-based Pages source, completion of GitHub's automatic
-`pages build and deployment` workflow also republishes the Vite build from that
-run's exact commit. This prevents a later Jekyll publication from replacing the
-verified app. Changing Settings -> Pages -> Source to **GitHub Actions** removes
-the legacy publication; the follow-up trigger then becomes dormant.
+retains its legacy branch-based Pages source, a push deployment waits for the
+matching automatic `pages build and deployment` run to finish, then publishes
+and verifies Vite. If no matching legacy run appears during the bounded discovery
+window, deployment proceeds. Changing Settings -> Pages -> Source to **GitHub
+Actions** removes the legacy publication and therefore the wait.
 
 Configure Pages
 tries to enable Pages automatically; if the repository does not have Pages

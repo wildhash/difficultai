@@ -51,22 +51,25 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn("down --volumes --remove-orphans", contents)
         self.assertIn("scripts/verify-worker-image.sh", workflow.read_text(encoding="utf-8"))
 
-    def test_vite_redeploys_after_legacy_pages_publication(self):
+    def test_vite_waits_for_legacy_pages_publication(self):
         workflow = ROOT / ".github" / "workflows" / "deploy-pages.yml"
         raw = workflow.read_text(encoding="utf-8")
         config = yaml.safe_load(raw)
         # PyYAML's YAML 1.1 loader treats the plain key `on` as boolean true.
         triggers = config.get("on", config.get(True))
-        legacy = triggers["workflow_run"]
-        self.assertEqual(legacy["workflows"], ["pages build and deployment"])
-        self.assertEqual(legacy["types"], ["completed"])
-        self.assertEqual(legacy["branches"], ["main"])
+        self.assertIsInstance(triggers, dict)
+        self.assertNotIn("workflow_run", triggers)
+        self.assertEqual(config.get("permissions", {}).get("actions"), "read")
+        deploy = config["jobs"]["deploy"]
+        self.assertEqual(deploy.get("permissions", {}).get("actions"), "read")
         contents = " ".join(raw.split())
-        self.assertIn(
-            "github.event.workflow_run.conclusion == 'success'", contents
-        )
-        self.assertGreaterEqual(
-            contents.count("github.event.workflow_run.head_sha || github.sha"), 3
+        self.assertIn("node scripts/wait-for-legacy-pages.mjs", contents)
+        self.assertIn("if: github.event_name == 'push'", contents)
+        for variable in ("GH_TOKEN", "REPOSITORY", "COMMIT_SHA"):
+            self.assertIn(variable, contents)
+        self.assertTrue(
+            (ROOT / "apps" / "web" / "demo" / "scripts" /
+             "wait-for-legacy-pages.mjs").is_file()
         )
 
 
