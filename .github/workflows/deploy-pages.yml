@@ -3,6 +3,13 @@ name: Web demo CI and Pages
 on:
   push:
     branches: [main]
+  # Repository Pages is still configured with a legacy branch source. Its
+  # automatic Jekyll publication can finish after this workflow's push run and
+  # replace the Vite app, so publish the triggering commit again afterward.
+  workflow_run:
+    workflows: ['pages build and deployment']
+    types: [completed]
+    branches: [main]
   pull_request:
     branches: [main]
     paths:
@@ -14,16 +21,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: web-demo-${{ github.ref }}
+  group: web-demo-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
   build:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -47,13 +57,13 @@ jobs:
         run: npm run build
 
       - name: Upload Pages artifact
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: apps/web/demo/dist
 
   deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request'
     permissions:
       contents: read
       pages: write
@@ -67,6 +77,8 @@ jobs:
     steps:
       - name: Checkout deployment verifier
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v4

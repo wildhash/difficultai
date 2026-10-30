@@ -529,3 +529,38 @@ owner acceptance decision.
 
 Rollback: revert the replacement-verification commit. It adds no persistent
 public record and never removes the named scorecard volume.
+
+### 2026-10-30: serialize Vite publication after legacy Pages
+
+Baseline: `0f2b1ec3c3f03c5ad876caca7048dc3771fa0ec4` (merged PR #23).
+
+Diagnosis: the custom Pages run built, deployed, and verified the Vite app, but
+GitHub's automatic `pages build and deployment` run completed afterward. A
+fresh public fetch then returned the repository Jekyll page (`Difficult AI |
+difficultai`) with one stylesheet instead of the Vite app. Two green workflows
+therefore did not establish a durable deployment because their writes raced.
+
+Alternatives: change the repository Pages source to GitHub Actions, which needs
+an unavailable settings action, or serialize the existing deployments in code.
+The smallest reachable repair is to republish Vite after the legacy workflow
+completes while retaining push deployment for repositories already configured
+for Actions.
+
+Decision: listen for successful completion of `pages build and deployment`,
+check out its exact head SHA, rebuild the Pages variant, deploy it, and run the
+existing public asset verifier. Failed legacy builds do not trigger deployment.
+
+Verification: a regression locks the workflow name, successful-run gate, and
+exact-SHA checkout. Before merge, the full Python suite plus web tests/build and
+exact-head PR CI must pass. After merge, the chained deployment must pass and a
+fresh public fetch must expose the Vite title and versioned JavaScript/CSS assets.
+
+Limitations: this repairs static publication only. It does not establish a
+credentialed worker, live audio, persistent real scorecards, owner acceptance,
+customers, verified payment, or revenue.
+
+Next executable step: merge after exact-head CI, wait for both the automatic
+Pages run and its chained Vite run, then verify the public app without cache.
+
+Rollback: revert this workflow commit. The prior deployment artifact remains
+available in Actions, and no worker, credential, or scorecard is modified.
