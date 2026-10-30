@@ -591,3 +591,45 @@ owner acceptance. After static verification, run the credentialed owner pilot.
 
 Rollback: revert the serialization commit to restore the prior deployment
 behavior; this touches no credentials, workers, or retained scorecards.
+
+### 2026-10-30: bind owner evidence to the deployed revision
+
+Baseline: `3ae9b4745aee7ec6c10e546a4bf2b581c80482a1` (merged PR #25).
+The Vite pilot is deployed and verified, no open work exists across the three
+Repo Rescue repositories, and the four voice credentials and Docker remain
+unavailable in this environment.
+
+Diagnosis: the worker image, retained scorecard, and owner attestation carried
+no source revision. Replacement could prove that the same private file survived,
+but could not prove which code produced it. A successful build or static deploy
+does not close that operational evidence gap.
+
+Alternatives: rely on a mutable image tag or ask the operator to write down a
+commit. The smaller reliable change is to derive the exact Git HEAD in the
+deployment gate, reject dirty or unidentified checkouts, pass the revision as a
+build argument and runtime value, and verify it inside the started worker.
+
+Decision: record the validated 40-character revision in every new scorecard.
+The privacy-safe verifier and owner attestation now require and retain that
+public revision, while continuing to omit rooms, scenarios, and transcripts.
+The Compose image CI also builds and checks the exact workflow revision.
+
+Verification: regressions first reproduced an unbound scorecard being accepted
+and an unversioned deploy path. All 108 Python tests, offline preflight, shell
+syntax, and diff checks pass locally. Exact-head CI must pass before merge.
+
+Review revision: normalize the runtime revision once, sanitize missing-Git
+errors, validate the CI revision and clean checkout before Compose, and preserve
+a specific revision-mismatch diagnosis while stopping the worker. Compose and
+the Dockerfile already pass the revision into the built and running service.
+
+Limitations: no worker was deployed and no credentials, provider access, live
+audio, real scorecard, replacement retention, or owner acceptance was verified.
+
+Next executable step: merge after exact-head CI, then on the intended Docker
+host deploy the clean merged revision with real credentials and complete one
+owner session, replacement check, and acceptance record.
+
+Rollback: revert this provenance commit and rebuild the worker without deleting
+the named scorecard volume. Previously saved scorecards remain untouched but
+will not pass the stricter revision-bound acceptance gate.

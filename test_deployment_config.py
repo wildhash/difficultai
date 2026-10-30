@@ -19,6 +19,7 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn("USER difficultai", normalized)
         self.assertIn('CMD ["python", "-m", "apps.livekit_agent", "start"]', normalized)
         self.assertIn("SCORECARD_DIR=/data/scorecards", normalized)
+        self.assertIn("DIFFICULTAI_BUILD_SHA", normalized)
 
     def test_owner_pilot_mount_matches_scorecard_directory(self):
         path = ROOT / "compose.owner-pilot.yml"
@@ -29,6 +30,7 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn("image: ${DIFFICULTAI_IMAGE:-difficultai-owner-pilot:latest}", compose)
         self.assertIn("- .env", compose)
         self.assertIn("restart: unless-stopped", compose)
+        self.assertIn("DIFFICULTAI_BUILD_SHA", compose)
 
     def test_build_context_excludes_credentials_and_runtime_evidence(self):
         path = ROOT / ".dockerignore"
@@ -48,6 +50,9 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn("$compose build", contents)
         self.assertGreaterEqual(contents.count("$compose run --rm --no-deps worker"), 5)
         self.assertIn("python -m apps.livekit_agent.smoke_test --offline", contents)
+        self.assertIn("git rev-parse --verify HEAD", contents)
+        self.assertIn("^[0-9a-f]{40}$", contents)
+        self.assertIn("git status --porcelain", contents)
         self.assertIn("down --volumes --remove-orphans", contents)
         self.assertIn("scripts/verify-worker-image.sh", workflow.read_text(encoding="utf-8"))
 

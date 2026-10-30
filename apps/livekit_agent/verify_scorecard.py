@@ -16,6 +16,7 @@ if ROOT not in sys.path:
 from difficultai.scorecard import SCORECARD_DIMENSIONS
 
 SESSION_ID = re.compile(r"[0-9a-f]{32}")
+SOURCE_REVISION = re.compile(r"[0-9a-f]{40}")
 
 
 def verify_scorecard(directory: Path, session_id: str) -> dict:
@@ -43,6 +44,10 @@ def verify_scorecard(directory: Path, session_id: str) -> dict:
         return _report(session_id, checks)
     record("identity", payload.get("session_id") == session_id, "Stored session ID matches the requested session.")
 
+    source_revision = payload.get("source_revision")
+    revision_valid = isinstance(source_revision, str) and bool(SOURCE_REVISION.fullmatch(source_revision))
+    record("source_revision", revision_valid, "Session evidence is bound to an exact Git revision.")
+
     completed = payload.get("status") == "completed" and payload.get("error") in (None, "")
     record("completion", completed, "Session completed without a recorded provider error.")
 
@@ -69,14 +74,15 @@ def verify_scorecard(directory: Path, session_id: str) -> dict:
     coaching = feedback.get("coaching_points") if isinstance(feedback, dict) else None
     evaluation_valid = scores_valid and isinstance(coaching, list) and len(coaching) == 3
     record("evaluation", evaluation_valid, "Evaluation has six 1-10 scores and three coaching points.")
-    return _report(session_id, checks)
+    return _report(session_id, checks, source_revision if revision_valid else None)
 
 
-def _report(session_id: str, checks: list[dict]) -> dict:
+def _report(session_id: str, checks: list[dict], source_revision=None) -> dict:
     failed = any(check["status"] == "failed" for check in checks)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "session_id": session_id if SESSION_ID.fullmatch(session_id) else None,
+        "source_revision": source_revision,
         "status": "failed" if failed else "passed",
         "checks": checks,
         "limitations": [

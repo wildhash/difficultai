@@ -32,6 +32,16 @@ EOF
 fi
 
 export DIFFICULTAI_IMAGE="$image"
+DIFFICULTAI_BUILD_SHA="$(git rev-parse --verify HEAD)"
+if ! printf '%s' "$DIFFICULTAI_BUILD_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+  echo "the source revision could not be identified; deploy from a Git commit" >&2
+  exit 1
+fi
+if [ -n "$(git status --porcelain)" ]; then
+  echo "the source checkout has uncommitted changes; image verification was not started" >&2
+  exit 1
+fi
+export DIFFICULTAI_BUILD_SHA
 compose="docker compose --project-name $project --file compose.owner-pilot.yml"
 $compose config --quiet
 $compose build
@@ -40,6 +50,9 @@ $compose build
 # the Dockerfile and expose the supported LiveKit worker CLI.
 $compose run --rm --no-deps worker sh -c 'test "$(id -u)" -ne 0'
 $compose run --rm --no-deps worker python -m apps.livekit_agent --help >/dev/null
+$compose run --rm --no-deps worker python -c \
+  "import os,sys; sys.exit(os.environ.get('DIFFICULTAI_BUILD_SHA') != sys.argv[1])" \
+  "$DIFFICULTAI_BUILD_SHA"
 $compose run --rm --no-deps worker \
   python -m apps.livekit_agent.smoke_test --offline >/dev/null
 

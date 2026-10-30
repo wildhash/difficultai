@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import json
+import re
 import uuid
 import tempfile
 from typing import Dict, Any, Optional
@@ -31,6 +32,7 @@ from apps.livekit_agent.scenario_validator import get_missing_fields
 from difficultai.observability import get_tracer
 
 logger = logging.getLogger(__name__)
+SOURCE_REVISION = re.compile(r"[0-9a-f]{40}")
 
 
 class SessionState:
@@ -495,8 +497,11 @@ DIFFICULTY LEVEL {difficulty:.2f} (0-1 scale):
         directory = Path(os.getenv("SCORECARD_DIR", "scorecards"))
         directory.mkdir(parents=True, exist_ok=True)
         scorecard_file = directory / f"scorecard_{self.session_id}.json"
+        raw_revision = os.getenv("DIFFICULTAI_BUILD_SHA", "").strip().lower()
+        source_revision = raw_revision if SOURCE_REVISION.fullmatch(raw_revision) else "unverified"
         payload = {
             "session_id": self.session_id,
+            "source_revision": source_revision,
             "room": self.ctx.room.name,
             "job_id": str(getattr(self.ctx.job, "id", "unknown")),
             "status": "failed" if self._session_error else "completed",

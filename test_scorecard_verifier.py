@@ -24,6 +24,7 @@ class TestScorecardVerifier(unittest.TestCase):
         self.session_id = "a" * 32
         self.payload = {
             "session_id": self.session_id,
+            "source_revision": "1" * 40,
             "room": "private-room",
             "job_id": "private-job",
             "status": "completed",
@@ -56,6 +57,16 @@ class TestScorecardVerifier(unittest.TestCase):
         self.assertEqual(report["status"], "failed")
         self.assertEqual(report["checks"][-1]["name"], "scorecard_file")
         self.assertNotIn(str(self.directory), json.dumps(report))
+
+    def test_unbound_source_revision_is_rejected(self):
+        self.payload["source_revision"] = "unverified"
+        self.write()
+        report = verify_scorecard.verify_scorecard(self.directory, self.session_id)
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(
+            {check["name"] for check in report["checks"] if check["status"] == "failed"},
+            {"source_revision"},
+        )
 
     def test_one_way_or_failed_session_is_not_accepted(self):
         self.payload["status"] = "failed"
