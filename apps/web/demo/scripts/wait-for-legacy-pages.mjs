@@ -1,3 +1,5 @@
+import { pathToFileURL } from 'node:url';
+
 const LEGACY_WORKFLOW = 'pages build and deployment';
 
 const wait = (milliseconds) =>
@@ -30,11 +32,18 @@ export async function waitForLegacyPages({
         'X-GitHub-Api-Version': '2022-11-28',
       },
     });
+    if (response.status === 429 || response.status >= 500) {
+      await sleep(pollMilliseconds);
+      continue;
+    }
     if (!response.ok) {
       throw new Error(`legacy Pages lookup failed with HTTP ${response.status}`);
     }
 
     const payload = await response.json();
+    if (!Array.isArray(payload.workflow_runs)) {
+      throw new Error('legacy Pages lookup returned an invalid Actions payload');
+    }
     const run = payload.workflow_runs
       .filter(
         (candidate) =>
@@ -45,6 +54,9 @@ export async function waitForLegacyPages({
       .sort((left, right) => right.id - left.id)[0];
 
     if (run?.status === 'completed') {
+      if (run.conclusion !== 'success') {
+        console.warn(`Legacy Pages run concluded with ${run.conclusion}; ordering is still complete.`);
+      }
       return { found: true, conclusion: run.conclusion };
     }
     if (!run && now() - started >= discoveryMilliseconds) {
@@ -53,7 +65,9 @@ export async function waitForLegacyPages({
     await sleep(pollMilliseconds);
   }
 
-  throw new Error('legacy Pages publication did not finish within five minutes');
+  throw new Error(
+    `legacy Pages publication did not finish within ${timeoutMilliseconds}ms`,
+  );
 }
 
 async function main() {
@@ -69,7 +83,7 @@ async function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     console.error(error.message);
     process.exitCode = 1;

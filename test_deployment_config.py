@@ -57,13 +57,16 @@ class DeploymentConfigTests(unittest.TestCase):
         config = yaml.safe_load(raw)
         # PyYAML's YAML 1.1 loader treats the plain key `on` as boolean true.
         triggers = config.get("on", config.get(True))
+        self.assertIsInstance(triggers, dict)
         self.assertNotIn("workflow_run", triggers)
-        self.assertEqual(config["permissions"]["actions"], "read")
+        self.assertEqual(config.get("permissions", {}).get("actions"), "read")
         deploy = config["jobs"]["deploy"]
-        self.assertEqual(deploy["permissions"]["actions"], "read")
+        self.assertEqual(deploy.get("permissions", {}).get("actions"), "read")
         contents = " ".join(raw.split())
         self.assertIn("node scripts/wait-for-legacy-pages.mjs", contents)
         self.assertIn("if: github.event_name == 'push'", contents)
+        for variable in ("GH_TOKEN", "REPOSITORY", "COMMIT_SHA"):
+            self.assertIn(variable, contents)
         self.assertTrue(
             (ROOT / "apps" / "web" / "demo" / "scripts" /
              "wait-for-legacy-pages.mjs").is_file()
