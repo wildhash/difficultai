@@ -40,8 +40,17 @@ a fixture remains readable by a replacement container on its configured named
 volume. The check uses an isolated Compose project and deletes its fixture
 volume. This is deployment-contract evidence only; it does not establish a
 running worker or retained live scorecard.
-After a real session, retain its session ID, recreate the worker, verify the
-scorecard, and record owner acceptance as described in the README.
+After a real completed session, retain its session ID and run:
+
+```bash
+make owner-pilot-replace SESSION_ID=<session-id>
+```
+
+The command requires a structurally valid scorecard before replacement, force
+recreates only the worker without rebuilding or removing volumes, then verifies
+the scorecard again and compares its unprinted SHA-256 fingerprint. This proves
+that exact private file remained available across that replacement. Record owner
+acceptance separately as described in the README.
 
 Rollback the worker without deleting evidence:
 
