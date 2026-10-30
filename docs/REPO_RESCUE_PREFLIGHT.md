@@ -615,9 +615,13 @@ public revision, while continuing to omit rooms, scenarios, and transcripts.
 The Compose image CI also builds and checks the exact workflow revision.
 
 Verification: regressions first reproduced an unbound scorecard being accepted
-and an unversioned deploy path. The targeted provenance, deployment, voice
-lifecycle, scorecard, and acceptance tests pass after the repair. The full suite,
-offline preflight, shell syntax, and exact-head CI must pass before merge.
+and an unversioned deploy path. All 108 Python tests, offline preflight, shell
+syntax, and diff checks pass locally. Exact-head CI must pass before merge.
+
+Review revision: normalize the runtime revision once, sanitize missing-Git
+errors, validate the CI revision and clean checkout before Compose, and preserve
+a specific revision-mismatch diagnosis while stopping the worker. Compose and
+the Dockerfile already pass the revision into the built and running service.
 
 Limitations: no worker was deployed and no credentials, provider access, live
 audio, real scorecard, replacement retention, or owner acceptance was verified.

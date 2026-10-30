@@ -28,17 +28,27 @@ def _run(stage, arguments, *, root, runner, environment, capture_output=False):
 
 
 def _source_revision(root, git_runner):
-    revision = git_runner(
-        ["git", "rev-parse", "--verify", "HEAD"], cwd=root, check=False,
-        capture_output=True, text=True,
-    )
+    try:
+        revision = git_runner(
+            ["git", "rev-parse", "--verify", "HEAD"], cwd=root, check=False,
+            capture_output=True, text=True,
+        )
+    except OSError as error:
+        raise DeploymentError(
+            "the source revision could not be identified; deploy from a Git commit"
+        ) from error
     value = revision.stdout.strip() if revision.returncode == 0 else ""
     if not REVISION.fullmatch(value):
         raise DeploymentError("the source revision could not be identified; deploy from a Git commit")
-    status = git_runner(
-        ["git", "status", "--porcelain"], cwd=root, check=False,
-        capture_output=True, text=True,
-    )
+    try:
+        status = git_runner(
+            ["git", "status", "--porcelain"], cwd=root, check=False,
+            capture_output=True, text=True,
+        )
+    except OSError as error:
+        raise DeploymentError(
+            "the source checkout could not be inspected; deployment was not started"
+        ) from error
     if status.returncode != 0:
         raise DeploymentError("the source checkout could not be inspected; deployment was not started")
     if status.stdout.strip():
@@ -65,6 +75,7 @@ def deploy(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.run):
          "apps.livekit_agent.smoke_test"),
         root=root, runner=runner, environment=environment,
     )
+    failure = "worker did not remain running and was stopped; scorecard storage was preserved"
     try:
         _run("Worker start", ("up", "-d", "--no-build", "worker"), root=root,
              runner=runner, environment=environment)
@@ -73,14 +84,20 @@ def deploy(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.run):
             root=root, runner=runner, environment=environment, capture_output=True,
         )
         if "worker" in status.stdout.splitlines():
-            _run(
-                "Worker revision",
-                ("exec", "-T", "worker", "python", "-c",
-                 "import os,sys; sys.exit(os.getenv('DIFFICULTAI_BUILD_SHA') != sys.argv[1])",
-                 revision),
-                root=root, runner=runner, environment=environment,
-            )
-            return
+            try:
+                _run(
+                    "Worker revision",
+                    ("exec", "-T", "worker", "python", "-c",
+                     "import os,sys; sys.exit(os.getenv('DIFFICULTAI_BUILD_SHA') != sys.argv[1])",
+                     revision),
+                    root=root, runner=runner, environment=environment,
+                )
+                return
+            except DeploymentError:
+                failure = (
+                    "worker revision did not match the deployed commit and the worker was stopped; "
+                    "scorecard storage was preserved"
+                )
     except DeploymentError:
         pass
 
@@ -88,7 +105,7 @@ def deploy(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.run):
     try:
         runner([*COMPOSE, "stop", "worker"], cwd=root, check=False, env=environment)
     finally:
-        raise DeploymentError("worker did not remain running and was stopped; scorecard storage was preserved")
+        raise DeploymentError(failure)
 
 
 def main(argv=None):

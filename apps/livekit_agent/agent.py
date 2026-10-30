@@ -497,13 +497,11 @@ DIFFICULTY LEVEL {difficulty:.2f} (0-1 scale):
         directory = Path(os.getenv("SCORECARD_DIR", "scorecards"))
         directory.mkdir(parents=True, exist_ok=True)
         scorecard_file = directory / f"scorecard_{self.session_id}.json"
+        raw_revision = os.getenv("DIFFICULTAI_BUILD_SHA", "").strip().lower()
+        source_revision = raw_revision if SOURCE_REVISION.fullmatch(raw_revision) else "unverified"
         payload = {
             "session_id": self.session_id,
-            "source_revision": (
-                os.getenv("DIFFICULTAI_BUILD_SHA", "").lower()
-                if SOURCE_REVISION.fullmatch(os.getenv("DIFFICULTAI_BUILD_SHA", "").lower())
-                else "unverified"
-            ),
+            "source_revision": source_revision,
             "room": self.ctx.room.name,
             "job_id": str(getattr(self.ctx.job, "id", "unknown")),
             "status": "failed" if self._session_error else "completed",

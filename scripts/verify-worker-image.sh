@@ -33,6 +33,14 @@ fi
 
 export DIFFICULTAI_IMAGE="$image"
 DIFFICULTAI_BUILD_SHA="$(git rev-parse --verify HEAD)"
+if ! printf '%s' "$DIFFICULTAI_BUILD_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+  echo "the source revision could not be identified; deploy from a Git commit" >&2
+  exit 1
+fi
+if [ -n "$(git status --porcelain)" ]; then
+  echo "the source checkout has uncommitted changes; image verification was not started" >&2
+  exit 1
+fi
 export DIFFICULTAI_BUILD_SHA
 compose="docker compose --project-name $project --file compose.owner-pilot.yml"
 $compose config --quiet

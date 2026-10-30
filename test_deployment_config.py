@@ -51,6 +51,8 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertGreaterEqual(contents.count("$compose run --rm --no-deps worker"), 5)
         self.assertIn("python -m apps.livekit_agent.smoke_test --offline", contents)
         self.assertIn("git rev-parse --verify HEAD", contents)
+        self.assertIn("^[0-9a-f]{40}$", contents)
+        self.assertIn("git status --porcelain", contents)
         self.assertIn("down --volumes --remove-orphans", contents)
         self.assertIn("scripts/verify-worker-image.sh", workflow.read_text(encoding="utf-8"))
 

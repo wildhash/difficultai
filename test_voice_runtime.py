@@ -93,6 +93,7 @@ class TestVoiceLifecycle(unittest.IsolatedAsyncioTestCase):
         return session
 
     async def test_current_sdk_events_forward_transcripts_and_save_once(self):
+        os.environ["DIFFICULTAI_BUILD_SHA"] = "  " + "1" * 40 + "\n"
         ctx = self.make_context()
         worker = DifficultAIAgent(ctx)
         transport = self.fake_transport()
@@ -110,7 +111,7 @@ class TestVoiceLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(files), 1)
         payload = json.loads(files[0].read_text())
         self.assertEqual(payload["status"], "completed")
-        self.assertEqual(payload["source_revision"], "unverified")
+        self.assertEqual(payload["source_revision"], "1" * 40)
         self.assertEqual(payload["room"], "../../same-room")
         self.assertEqual(len(payload["transcript"]), 2)
         original = files[0].read_bytes()

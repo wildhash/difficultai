@@ -19,19 +19,22 @@ class RecordingRunner:
 
     def __call__(self, command, **kwargs):
         self.calls.append((tuple(command), kwargs))
-        failed = self.fail_marker and self.fail_marker in command
+        failed = self.fail_marker and any(self.fail_marker in part for part in command)
         stdout = self.status if command[-4:] == ["ps", "--status", "running", "--services"] else ""
         return SimpleNamespace(returncode=1 if failed else 0, stdout=stdout)
 
 
 class RecordingGit:
-    def __init__(self, *, revision=REVISION, dirty=False):
+    def __init__(self, *, revision=REVISION, dirty=False, error=False):
         self.revision = revision
         self.dirty = dirty
+        self.error = error
         self.calls = []
 
     def __call__(self, command, **kwargs):
         self.calls.append((tuple(command), kwargs))
+        if self.error:
+            raise FileNotFoundError("private host path")
         stdout = self.revision + "\n" if "rev-parse" in command else (" M private.py\n" if self.dirty else "")
         return SimpleNamespace(returncode=0, stdout=stdout)
 
@@ -85,6 +88,21 @@ class OwnerPilotDeployTests(unittest.TestCase):
         with self.assertRaisesRegex(DeploymentError, "uncommitted"):
             deploy(root=self.root, runner=runner, git_runner=RecordingGit(dirty=True))
         self.assertEqual(runner.calls, [])
+
+    def test_missing_git_is_reported_without_raw_host_error(self):
+        self.configure()
+        runner = RecordingRunner()
+        with self.assertRaisesRegex(DeploymentError, "source revision") as caught:
+            deploy(root=self.root, runner=runner, git_runner=RecordingGit(error=True))
+        self.assertNotIn("private host path", str(caught.exception))
+        self.assertEqual(runner.calls, [])
+
+    def test_revision_mismatch_stops_worker_with_specific_diagnosis(self):
+        self.configure()
+        runner = RecordingRunner(fail_marker="import os,sys")
+        with self.assertRaisesRegex(DeploymentError, "revision did not match"):
+            deploy(root=self.root, runner=runner, git_runner=RecordingGit())
+        self.assertEqual(runner.calls[-1][0], (*COMPOSE, "stop", "worker"))
 
     def test_non_running_worker_is_stopped_without_volume_removal(self):
         self.configure()
