@@ -486,3 +486,46 @@ complete the session/replacement/verification/attestation sequence.
 
 Rollback: revert the deployment-gate commit. It does not delete the named volume
 or alter previously retained evidence.
+
+### 2026-10-30: make replacement-retention evidence executable
+
+Baseline: `7388df7166eca5b76f8b5702d76d04bf39f6ad2d` (merged PR #22).
+All three repositories have no competing open work, the static pilot remains
+deployed, and LiveKit/OpenAI credentials remain unavailable here.
+
+Diagnosis: the owner runbook still required manually replacing the worker and
+then running the scorecard verifier. A passing post-replacement structure check
+did not bind the retained file to the exact private file seen beforehand, and an
+operator could accidentally rebuild or remove the volume during the sequence.
+
+Alternatives: document more manual commands, persist a public fingerprint, or
+perform the comparison privately in one executable operation. The last option
+provides stronger evidence without publishing transcript-derived material.
+
+Decision: add `make owner-pilot-replace SESSION_ID=<id>`. It requires the worker
+to be running, verifies the completed scorecard, computes an unprinted SHA-256
+fingerprint inside the container, force recreates only the worker without a
+build or volume operation, then repeats both checks. The operation passes only
+when the worker remains running and the private file fingerprint is unchanged.
+
+Verification: regressions cover invalid IDs before Docker, failed evidence
+before replacement, one exact force recreation with no volume-removal command,
+changed private evidence without fingerprint disclosure, and a non-running
+replacement. The full Python suite, offline preflight, and exact-head CI must
+pass before merge.
+
+Review revision: bound every Compose subprocess beyond the configured 15-minute
+worker stop grace period, retry post-replacement readiness five times, and read
+the scorecard directory from the service environment rather than duplicating
+its path. Timeout reports remain sanitized.
+
+Limitations: tests mock the replacement command sequence. This does not deploy a
+worker or establish real-session retention, live audio, owner acceptance,
+customers, verified payment, or revenue without a credentialed owner run.
+
+Next executable step: deploy with real credentials, complete one owner session,
+run the replacement command with its session ID, then personally record the
+owner acceptance decision.
+
+Rollback: revert the replacement-verification commit. It adds no persistent
+public record and never removes the named scorecard volume.

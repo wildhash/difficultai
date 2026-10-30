@@ -174,12 +174,13 @@ the default directory is ignored by Git. Configure a persistent volume for
 retention across worker/container replacement. This file store does not provide
 authenticated customer retrieval or managed backups.
 
-For a replacement-durability check, retain the worker's session ID, replace or
-restart the worker with the same persistent volume, then run
-`make verify-scorecard SESSION_ID=<session-id>`. The command reports only schema
-and completion checks; it never prints private transcript or scenario content.
-Treat it as storage evidence only when it runs after a real replacement, and
-record owner acceptance separately.
+For a replacement-durability check, retain the worker's session ID and run
+`make owner-pilot-replace SESSION_ID=<session-id>`. The command requires the
+worker and a structurally valid scorecard before replacement, force recreates
+only that worker with the same Compose volume, then revalidates the scorecard
+and compares its unprinted SHA-256 fingerprint. It never prints private
+transcript, scenario content, or the fingerprint. Record owner acceptance
+separately.
 
 After the owner personally judges the live audio, run
 `make record-owner-acceptance SESSION_ID=<session-id> DECISION=accepted

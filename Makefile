@@ -1,4 +1,4 @@
-.PHONY: dev test smoke-test preflight-offline owner-pilot-deploy owner-session verify-scorecard record-owner-acceptance opik-smoke-test opik-eval-suite install clean help
+.PHONY: dev test smoke-test preflight-offline owner-pilot-deploy owner-pilot-replace owner-session verify-scorecard record-owner-acceptance opik-smoke-test opik-eval-suite install clean help
 
 # Default target
 help:
@@ -8,6 +8,7 @@ help:
 	@echo "  make smoke-test       - Check local components, storage, and LiveKit connectivity"
 	@echo "  make preflight-offline - Check local components and storage without credentials"
 	@echo "  make owner-pilot-deploy - Validate, preflight, and start the Compose worker"
+	@echo "  make owner-pilot-replace SESSION_ID=<id> - Replace worker and verify retained evidence"
 	@echo "  make owner-session SCENARIO=<file> - Create a configured owner-pilot room and token"
 	@echo "  make verify-scorecard SESSION_ID=<id> - Verify retained owner-session evidence"
 	@echo "  make record-owner-acceptance SESSION_ID=<id> DECISION=<accepted|rejected> AUDIO_QUALITY=<acceptable|unacceptable>"
@@ -38,6 +39,10 @@ preflight-offline:
 # Build and start only after credentialed LiveKit connectivity passes.
 owner-pilot-deploy:
 	python apps/livekit_agent/deploy_owner_pilot.py
+
+owner-pilot-replace:
+	@test -n "$(SESSION_ID)" || (echo "SESSION_ID is required" >&2; exit 2)
+	python apps/livekit_agent/replace_owner_pilot.py "$(SESSION_ID)"
 
 owner-session:
 	@test -n "$(SCENARIO)" || (echo "SCENARIO is required" >&2; exit 2)
