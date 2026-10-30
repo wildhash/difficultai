@@ -3,13 +3,6 @@ name: Web demo CI and Pages
 on:
   push:
     branches: [main]
-  # Repository Pages is still configured with a legacy branch source. Its
-  # automatic Jekyll publication can finish after this workflow's push run and
-  # replace the Vite app, so publish the triggering commit again afterward.
-  workflow_run:
-    workflows: ['pages build and deployment']
-    types: [completed]
-    branches: [main]
   pull_request:
     branches: [main]
     paths:
@@ -18,22 +11,20 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
-  group: web-demo-${{ github.event.workflow_run.head_sha || github.sha }}
+  group: web-demo-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -57,14 +48,15 @@ jobs:
         run: npm run build
 
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: apps/web/demo/dist
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     permissions:
+      actions: read
       contents: read
       pages: write
       id-token: write
@@ -77,13 +69,20 @@ jobs:
     steps:
       - name: Checkout deployment verifier
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Wait for matching legacy Pages publication
+        if: github.event_name == 'push'
+        working-directory: apps/web/demo
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: node scripts/wait-for-legacy-pages.mjs
 
       # Requires Settings -> Pages -> Source: GitHub Actions (see demo README).
       - name: Configure Pages
