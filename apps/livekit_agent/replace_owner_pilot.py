@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -15,9 +16,10 @@ from apps.livekit_agent.verify_scorecard import SESSION_ID
 
 COMPOSE = ("docker", "compose", "--file", "compose.owner-pilot.yml")
 DIGEST = re.compile(r"[0-9a-f]{64}")
+COMMAND_TIMEOUT_SECONDS = 16 * 60
 DIGEST_CODE = (
-    "from hashlib import sha256; from pathlib import Path; import sys; "
-    "p=Path('/data/scorecards') / f'scorecard_{sys.argv[1]}.json'; "
+    "from hashlib import sha256; from pathlib import Path; import os, sys; "
+    "p=Path(os.environ['SCORECARD_DIR']) / f'scorecard_{sys.argv[1]}.json'; "
     "print(sha256(p.read_bytes()).hexdigest())"
 )
 
@@ -27,10 +29,16 @@ class ReplacementError(RuntimeError):
 
 
 def _run(stage, arguments, *, root, runner, capture_output=True):
-    result = runner(
-        [*COMPOSE, *arguments], cwd=root, check=False,
-        capture_output=capture_output, text=capture_output,
-    )
+    try:
+        result = runner(
+            [*COMPOSE, *arguments], cwd=root, check=False,
+            capture_output=capture_output, text=capture_output,
+            timeout=COMMAND_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise ReplacementError(
+            f"{stage} timed out; inspect private service logs locally before retrying"
+        ) from error
     if result.returncode != 0:
         raise ReplacementError(f"{stage} failed; inspect private service logs locally before retrying")
     return result
@@ -63,7 +71,8 @@ def _verify_and_digest(session_id, *, root, runner, stage):
     return digest
 
 
-def replace_and_verify(session_id, *, root=ROOT, runner=subprocess.run):
+def replace_and_verify(session_id, *, root=ROOT, runner=subprocess.run,
+                       sleeper=time.sleep, readiness_attempts=5):
     if not SESSION_ID.fullmatch(session_id):
         raise ReplacementError("expected a 32-character lowercase hexadecimal session ID")
 
@@ -75,10 +84,25 @@ def replace_and_verify(session_id, *, root=ROOT, runner=subprocess.run):
         ("up", "-d", "--no-deps", "--no-build", "--force-recreate", "worker"),
         root=root, runner=runner, capture_output=False,
     )
-    _require_running(root=root, runner=runner, stage="Post-replacement status")
-    after = _verify_and_digest(session_id, root=root, runner=runner, stage="Post-replacement")
-    if before != after:
-        raise ReplacementError("retained scorecard changed across worker replacement")
+    last_error = None
+    for attempt in range(readiness_attempts):
+        try:
+            _require_running(root=root, runner=runner, stage="Post-replacement status")
+            after = _verify_and_digest(
+                session_id, root=root, runner=runner, stage="Post-replacement"
+            )
+            if before != after:
+                raise ReplacementError("retained scorecard changed across worker replacement")
+            return
+        except ReplacementError as error:
+            if "changed across" in str(error):
+                raise
+            last_error = error
+            if attempt + 1 < readiness_attempts:
+                sleeper(2)
+    raise ReplacementError(
+        "post-replacement readiness checks did not pass within the bounded retry window"
+    ) from last_error
 
 
 def main(argv=None):

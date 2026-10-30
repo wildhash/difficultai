@@ -514,6 +514,11 @@ changed private evidence without fingerprint disclosure, and a non-running
 replacement. The full Python suite, offline preflight, and exact-head CI must
 pass before merge.
 
+Review revision: bound every Compose subprocess beyond the configured 15-minute
+worker stop grace period, retry post-replacement readiness five times, and read
+the scorecard directory from the service environment rather than duplicating
+its path. Timeout reports remain sanitized.
+
 Limitations: tests mock the replacement command sequence. This does not deploy a
 worker or establish real-session retention, live audio, owner acceptance,
 customers, verified payment, or revenue without a credentialed owner run.

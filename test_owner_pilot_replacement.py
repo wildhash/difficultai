@@ -1,6 +1,7 @@
 """Regression tests for privacy-safe owner-pilot replacement verification."""
 
 from types import SimpleNamespace
+import subprocess
 import unittest
 
 from apps.livekit_agent.replace_owner_pilot import COMPOSE, ReplacementError, replace_and_verify
@@ -19,6 +20,11 @@ class QueueRunner:
     def __call__(self, command, **kwargs):
         self.calls.append((tuple(command), kwargs))
         return self.results.pop(0)
+
+
+class TimeoutRunner:
+    def __call__(self, command, **kwargs):
+        raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
 
 
 def result(returncode=0, stdout=""):
@@ -47,7 +53,7 @@ class OwnerPilotReplacementTests(unittest.TestCase):
 
     def test_replaces_once_and_verifies_same_private_file(self):
         runner = QueueRunner(success_results())
-        replace_and_verify(SESSION_ID, runner=runner)
+        replace_and_verify(SESSION_ID, runner=runner, sleeper=lambda _: None)
         commands = [call[0][len(COMPOSE):] for call in runner.calls]
         self.assertEqual(commands[3],
                          ("up", "-d", "--no-deps", "--no-build", "--force-recreate", "worker"))
@@ -58,17 +64,21 @@ class OwnerPilotReplacementTests(unittest.TestCase):
     def test_changed_private_file_fails_without_printing_digest(self):
         runner = QueueRunner(success_results(after=DIGEST_B))
         with self.assertRaisesRegex(ReplacementError, "changed across") as caught:
-            replace_and_verify(SESSION_ID, runner=runner)
+            replace_and_verify(SESSION_ID, runner=runner, sleeper=lambda _: None)
         message = str(caught.exception)
         self.assertNotIn(DIGEST_A, message)
         self.assertNotIn(DIGEST_B, message)
 
     def test_post_replacement_worker_must_be_running(self):
-        responses = success_results()
-        responses[4] = result(stdout="")
-        runner = QueueRunner(responses[:5])
-        with self.assertRaisesRegex(ReplacementError, "not running"):
-            replace_and_verify(SESSION_ID, runner=runner)
+        responses = success_results()[:4] + [result(stdout="")] * 5
+        runner = QueueRunner(responses)
+        with self.assertRaisesRegex(ReplacementError, "bounded retry"):
+            replace_and_verify(SESSION_ID, runner=runner, sleeper=lambda _: None)
+
+    def test_compose_timeout_is_sanitized_and_bounded(self):
+        with self.assertRaisesRegex(ReplacementError, "timed out") as caught:
+            replace_and_verify(SESSION_ID, runner=TimeoutRunner(), sleeper=lambda _: None)
+        self.assertNotIn("docker", str(caught.exception))
 
 
 if __name__ == "__main__":
