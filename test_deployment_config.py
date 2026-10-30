@@ -4,6 +4,8 @@ from pathlib import Path
 import stat
 import unittest
 
+import yaml
+
 
 ROOT = Path(__file__).parent
 
@@ -51,10 +53,15 @@ class DeploymentConfigTests(unittest.TestCase):
 
     def test_vite_redeploys_after_legacy_pages_publication(self):
         workflow = ROOT / ".github" / "workflows" / "deploy-pages.yml"
-        contents = " ".join(workflow.read_text(encoding="utf-8").split())
-        self.assertIn("workflow_run:", contents)
-        self.assertIn("workflows: ['pages build and deployment']", contents)
-        self.assertIn("types: [completed]", contents)
+        raw = workflow.read_text(encoding="utf-8")
+        config = yaml.safe_load(raw)
+        # PyYAML's YAML 1.1 loader treats the plain key `on` as boolean true.
+        triggers = config.get("on", config.get(True))
+        legacy = triggers["workflow_run"]
+        self.assertEqual(legacy["workflows"], ["pages build and deployment"])
+        self.assertEqual(legacy["types"], ["completed"])
+        self.assertEqual(legacy["branches"], ["main"])
+        contents = " ".join(raw.split())
         self.assertIn(
             "github.event.workflow_run.conclusion == 'success'", contents
         )
