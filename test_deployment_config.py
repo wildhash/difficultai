@@ -49,6 +49,19 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn("down --volumes --remove-orphans", contents)
         self.assertIn("scripts/verify-worker-image.sh", workflow.read_text(encoding="utf-8"))
 
+    def test_vite_redeploys_after_legacy_pages_publication(self):
+        workflow = ROOT / ".github" / "workflows" / "deploy-pages.yml"
+        contents = " ".join(workflow.read_text(encoding="utf-8").split())
+        self.assertIn("workflow_run:", contents)
+        self.assertIn("workflows: ['pages build and deployment']", contents)
+        self.assertIn("types: [completed]", contents)
+        self.assertIn(
+            "github.event.workflow_run.conclusion == 'success'", contents
+        )
+        self.assertGreaterEqual(
+            contents.count("github.event.workflow_run.head_sha || github.sha"), 3
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
