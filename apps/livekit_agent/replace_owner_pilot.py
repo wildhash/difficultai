@@ -30,6 +30,10 @@ class ReplacementError(RuntimeError):
     """A sanitized replacement-verification failure."""
 
 
+class IntegrityError(ReplacementError):
+    """A terminal mismatch in retained or runtime evidence."""
+
+
 def _run(stage, arguments, *, root, runner, capture_output=True):
     try:
         result = runner(
@@ -62,21 +66,25 @@ def _verify_and_digest(session_id, *, root, runner, stage):
          "apps.livekit_agent.verify_scorecard", session_id),
         root=root, runner=runner,
     )
+    output = verification.stdout or ""
+    start, end = output.find("{"), output.rfind("}")
     try:
-        report = json.loads(verification.stdout)
+        report = json.loads(output[start:end + 1]) if start >= 0 and end >= start else None
     except (TypeError, json.JSONDecodeError) as error:
         raise ReplacementError(f"{stage} scorecard verification output was invalid") from error
-    source_revision = report.get("source_revision") if isinstance(report, dict) else None
+    if not isinstance(report, dict):
+        raise ReplacementError(f"{stage} scorecard verification output was invalid")
+    source_revision = report.get("source_revision")
     if not isinstance(source_revision, str) or not SOURCE_REVISION.fullmatch(source_revision):
-        raise ReplacementError(f"{stage} scorecard source revision was invalid")
+        raise IntegrityError(f"{stage} scorecard source revision was invalid")
     worker = _run(
         f"{stage} worker revision",
         ("exec", "-T", "worker", "python", "-c", REVISION_CODE),
         root=root, runner=runner,
     )
-    worker_revision = worker.stdout.strip()
+    worker_revision = (worker.stdout or "").strip()
     if not SOURCE_REVISION.fullmatch(worker_revision) or worker_revision != source_revision:
-        raise ReplacementError(f"{stage} worker revision did not match scorecard evidence")
+        raise IntegrityError(f"{stage} worker revision did not match scorecard evidence")
     result = _run(
         f"{stage} scorecard fingerprint",
         ("exec", "-T", "worker", "python", "-c", DIGEST_CODE, session_id),
@@ -111,13 +119,13 @@ def replace_and_verify(session_id, *, root=ROOT, runner=subprocess.run,
                 session_id, root=root, runner=runner, stage="Post-replacement"
             )
             if before_revision != after_revision:
-                raise ReplacementError("scorecard source revision changed across worker replacement")
+                raise IntegrityError("scorecard source revision changed across worker replacement")
             if before != after:
-                raise ReplacementError("retained scorecard changed across worker replacement")
+                raise IntegrityError("retained scorecard changed across worker replacement")
             return
+        except IntegrityError:
+            raise
         except ReplacementError as error:
-            if "changed across" in str(error) or "revision did not match" in str(error):
-                raise
             last_error = error
             if attempt + 1 < readiness_attempts:
                 sleeper(2)

@@ -66,6 +66,19 @@ class OwnerPilotReplacementTests(unittest.TestCase):
         self.assertNotIn("private malformed output", str(caught.exception))
         self.assertFalse(any("--force-recreate" in call[0] for call in runner.calls))
 
+    def test_sanitized_json_can_be_extracted_from_wrapper_output(self):
+        responses = success_results()
+        responses[1].stdout = "diagnostic without private content\n" + verification() + "done\n"
+        runner = QueueRunner(responses)
+        replace_and_verify(SESSION_ID, runner=runner, sleeper=lambda _: None)
+
+    def test_missing_worker_revision_output_is_sanitized(self):
+        runner = QueueRunner([
+            result(stdout="worker\n"), result(stdout=verification()), result(stdout=None),
+        ])
+        with self.assertRaisesRegex(ReplacementError, "revision did not match"):
+            replace_and_verify(SESSION_ID, runner=runner)
+
     def test_missing_scorecard_revision_fails_before_replacement(self):
         runner = QueueRunner([
             result(stdout="worker\n"),

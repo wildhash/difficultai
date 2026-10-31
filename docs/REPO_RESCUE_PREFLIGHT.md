@@ -655,9 +655,14 @@ and compare it with the running worker environment before and after the forced
 recreation. A mismatch fails immediately without printing either revision. The
 existing unprinted file fingerprint must still remain identical.
 
+Review revision: use a typed terminal integrity failure instead of message-text
+matching, normalize absent subprocess output, and extract the verifier's JSON
+object without assuming that stdout contains no harmless wrapper lines.
+
 Verification: regressions reproduce false passes for both pre- and post-replace
-revision mismatches, plus malformed or missing sanitized evidence. All 112 Python
-tests and the offline preflight pass locally. Exact-head CI must pass before merge.
+revision mismatches, plus malformed, wrapped, missing, or null subprocess output.
+All 114 Python tests and the offline preflight pass on the revised head. Exact-head
+CI must pass before merge.
 
 Limitations: mocked command sequencing does not deploy a worker or establish
 credentials, provider access, live audio, real-session storage retention, owner
