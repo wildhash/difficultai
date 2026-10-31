@@ -633,3 +633,39 @@ owner session, replacement check, and acceptance record.
 Rollback: revert this provenance commit and rebuild the worker without deleting
 the named scorecard volume. Previously saved scorecards remain untouched but
 will not pass the stricter revision-bound acceptance gate.
+
+### 2026-10-31: bind replacement proof to the worker revision
+
+Baseline: `2a2f7876dadb6f2e0993651b838a8a109636b933` (merged PR #26).
+The latest main Python/image and serialized Vite workflows passed. RepoMan and
+make_my_day remain at `eac812e` and `d198eac`, with no open work across the three
+repositories. Docker and the four voice credentials remain unavailable here.
+
+Diagnosis: the replacement command validated the scorecard's new source revision
+only indirectly, then compared the private file fingerprint. It never checked
+the running container's `DIFFICULTAI_BUILD_SHA`. A stale or retagged image could
+therefore be recreated and still produce a successful retention message.
+
+Alternatives: trust the Compose tag, print revisions for manual comparison, or
+perform the comparison privately inside the existing operation. The last option
+is the smallest safe extension and does not expose transcript-derived material.
+
+Decision: parse the verifier's sanitized JSON, require its exact source revision,
+and compare it with the running worker environment before and after the forced
+recreation. A mismatch fails immediately without printing either revision. The
+existing unprinted file fingerprint must still remain identical.
+
+Verification: regressions reproduce false passes for both pre- and post-replace
+revision mismatches, plus malformed or missing sanitized evidence. All 112 Python
+tests and the offline preflight pass locally. Exact-head CI must pass before merge.
+
+Limitations: mocked command sequencing does not deploy a worker or establish
+credentials, provider access, live audio, real-session storage retention, owner
+acceptance, customer activity, payment, or revenue.
+
+Next executable step: after merge, deploy the exact clean main revision on the
+intended Docker host, complete one real owner session, run the bound replacement
+check, and record the owner's separate acceptance decision.
+
+Rollback: revert this repair. It changes no image, scorecard, transcript, volume,
+or acceptance record and never invokes a volume-removal command.
