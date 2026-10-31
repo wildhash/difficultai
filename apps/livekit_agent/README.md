@@ -180,7 +180,9 @@ worker and a structurally valid scorecard before replacement, force recreates
 only that worker with the same Compose volume, then revalidates the scorecard
 and compares its unprinted SHA-256 fingerprint. It never prints private
 transcript, scenario content, or the fingerprint. Record owner acceptance
-separately.
+separately. The command also requires the running worker's embedded Git revision
+to match the scorecard's source revision before and after replacement, preventing
+a stale or retagged image from producing a false retention pass.
 
 After the owner personally judges the live audio, run
 `make record-owner-acceptance SESSION_ID=<session-id> DECISION=accepted

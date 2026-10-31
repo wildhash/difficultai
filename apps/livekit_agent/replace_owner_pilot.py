@@ -1,6 +1,7 @@
 """Replace the owner-pilot worker and verify retained evidence without exposing it."""
 
 import argparse
+import json
 import re
 from pathlib import Path
 import subprocess
@@ -11,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
-from apps.livekit_agent.verify_scorecard import SESSION_ID
+from apps.livekit_agent.verify_scorecard import SESSION_ID, SOURCE_REVISION
 
 
 COMPOSE = ("docker", "compose", "--file", "compose.owner-pilot.yml")
@@ -22,10 +23,15 @@ DIGEST_CODE = (
     "p=Path(os.environ['SCORECARD_DIR']) / f'scorecard_{sys.argv[1]}.json'; "
     "print(sha256(p.read_bytes()).hexdigest())"
 )
+REVISION_CODE = "import os; print(os.environ.get('DIFFICULTAI_BUILD_SHA', ''))"
 
 
 class ReplacementError(RuntimeError):
     """A sanitized replacement-verification failure."""
+
+
+class IntegrityError(ReplacementError):
+    """A terminal mismatch in retained or runtime evidence."""
 
 
 def _run(stage, arguments, *, root, runner, capture_output=True):
@@ -54,12 +60,31 @@ def _require_running(*, root, runner, stage):
 
 
 def _verify_and_digest(session_id, *, root, runner, stage):
-    _run(
+    verification = _run(
         f"{stage} scorecard verification",
         ("exec", "-T", "worker", "python", "-m",
          "apps.livekit_agent.verify_scorecard", session_id),
         root=root, runner=runner,
     )
+    output = verification.stdout or ""
+    start, end = output.find("{"), output.rfind("}")
+    try:
+        report = json.loads(output[start:end + 1]) if start >= 0 and end >= start else None
+    except (TypeError, json.JSONDecodeError) as error:
+        raise ReplacementError(f"{stage} scorecard verification output was invalid") from error
+    if not isinstance(report, dict):
+        raise ReplacementError(f"{stage} scorecard verification output was invalid")
+    source_revision = report.get("source_revision")
+    if not isinstance(source_revision, str) or not SOURCE_REVISION.fullmatch(source_revision):
+        raise IntegrityError(f"{stage} scorecard source revision was invalid")
+    worker = _run(
+        f"{stage} worker revision",
+        ("exec", "-T", "worker", "python", "-c", REVISION_CODE),
+        root=root, runner=runner,
+    )
+    worker_revision = (worker.stdout or "").strip()
+    if not SOURCE_REVISION.fullmatch(worker_revision) or worker_revision != source_revision:
+        raise IntegrityError(f"{stage} worker revision did not match scorecard evidence")
     result = _run(
         f"{stage} scorecard fingerprint",
         ("exec", "-T", "worker", "python", "-c", DIGEST_CODE, session_id),
@@ -68,7 +93,7 @@ def _verify_and_digest(session_id, *, root, runner, stage):
     digest = result.stdout.strip()
     if not DIGEST.fullmatch(digest):
         raise ReplacementError(f"{stage} scorecard fingerprint was invalid")
-    return digest
+    return digest, source_revision
 
 
 def replace_and_verify(session_id, *, root=ROOT, runner=subprocess.run,
@@ -78,7 +103,9 @@ def replace_and_verify(session_id, *, root=ROOT, runner=subprocess.run,
 
     root = Path(root)
     _require_running(root=root, runner=runner, stage="Pre-replacement status")
-    before = _verify_and_digest(session_id, root=root, runner=runner, stage="Pre-replacement")
+    before, before_revision = _verify_and_digest(
+        session_id, root=root, runner=runner, stage="Pre-replacement"
+    )
     _run(
         "Worker replacement",
         ("up", "-d", "--no-deps", "--no-build", "--force-recreate", "worker"),
@@ -88,15 +115,17 @@ def replace_and_verify(session_id, *, root=ROOT, runner=subprocess.run,
     for attempt in range(readiness_attempts):
         try:
             _require_running(root=root, runner=runner, stage="Post-replacement status")
-            after = _verify_and_digest(
+            after, after_revision = _verify_and_digest(
                 session_id, root=root, runner=runner, stage="Post-replacement"
             )
+            if before_revision != after_revision:
+                raise IntegrityError("scorecard source revision changed across worker replacement")
             if before != after:
-                raise ReplacementError("retained scorecard changed across worker replacement")
+                raise IntegrityError("retained scorecard changed across worker replacement")
             return
+        except IntegrityError:
+            raise
         except ReplacementError as error:
-            if "changed across" in str(error):
-                raise
             last_error = error
             if attempt + 1 < readiness_attempts:
                 sleeper(2)
@@ -114,7 +143,7 @@ def main(argv=None):
     except ReplacementError as error:
         print(f"Owner-pilot replacement verification failed: {error}", file=sys.stderr)
         return 1
-    print("Owner-pilot worker was replaced and the same structurally valid scorecard remained available.")
+    print("Owner-pilot worker was replaced; its revision matched the unchanged, structurally valid scorecard.")
     print("Private content and its fingerprint were not printed; owner acceptance remains separate.")
     return 0
 
