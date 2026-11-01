@@ -37,12 +37,17 @@ def verification(revision=REVISION_A):
     return '{"status":"passed","source_revision":"' + revision + '"}\n'
 
 
+def receipt(revision=REVISION_A):
+    return ('{"status":"recorded","session_id":"' + SESSION_ID
+            + '","source_revision":"' + revision + '"}\n')
+
+
 def success_results(after=DIGEST_A, post_revision=REVISION_A):
     return [
         result(stdout="worker\n"), result(stdout=verification()), result(stdout=REVISION_A + "\n"),
         result(stdout=DIGEST_A + "\n"), result(), result(stdout="worker\n"),
         result(stdout=verification()), result(stdout=post_revision + "\n"),
-        result(stdout=after + "\n"),
+        result(stdout=after + "\n"), result(stdout=receipt(post_revision)),
     ]
 
 
@@ -97,7 +102,22 @@ class OwnerPilotReplacementTests(unittest.TestCase):
         self.assertEqual(sum("--force-recreate" in command for command in commands), 1)
         self.assertEqual(sum("apps.livekit_agent.verify_scorecard" in command for command in commands), 2)
         self.assertEqual(sum("DIFFICULTAI_BUILD_SHA" in " ".join(command) for command in commands), 2)
+        self.assertEqual(sum("apps.livekit_agent.replacement_receipt" in command for command in commands), 1)
         self.assertTrue(all("--volumes" not in command and "down" not in command for command in commands))
+
+    def test_receipt_failure_prevents_success_claim(self):
+        responses = success_results()
+        responses[-1] = result(returncode=1)
+        runner = QueueRunner(responses)
+        with self.assertRaisesRegex(ReplacementError, "Replacement receipt failed"):
+            replace_and_verify(SESSION_ID, runner=runner, sleeper=lambda _: None)
+
+    def test_receipt_success_output_must_bind_session_and_revision(self):
+        responses = success_results()
+        responses[-1] = result(stdout='{"status":"recorded"}\n')
+        runner = QueueRunner(responses)
+        with self.assertRaisesRegex(ReplacementError, "receipt output was invalid"):
+            replace_and_verify(SESSION_ID, runner=runner, sleeper=lambda _: None)
 
     def test_pre_replacement_worker_must_match_scorecard_revision(self):
         responses = [

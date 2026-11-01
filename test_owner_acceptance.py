@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from apps.livekit_agent.record_owner_acceptance import main, record_acceptance
+from apps.livekit_agent.replacement_receipt import record_replacement
 from difficultai.scorecard import SCORECARD_DIMENSIONS
 
 
@@ -39,6 +40,7 @@ class OwnerAcceptanceTests(unittest.TestCase):
         (self.directory / f"scorecard_{SESSION_ID}.json").write_text(
             json.dumps(valid_scorecard()), encoding="utf-8"
         )
+        record_replacement(self.directory, SESSION_ID, "1" * 40)
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -52,6 +54,7 @@ class OwnerAcceptanceTests(unittest.TestCase):
         self.assertEqual(json.loads(destination.read_text()), record)
         self.assertEqual(record["evidence_type"], "owner_self_attestation")
         self.assertTrue(record["retained_scorecard_verified"])
+        self.assertTrue(record["worker_replacement_verified"])
         self.assertEqual(record["source_revision"], "1" * 40)
         self.assertNotIn("transcript", destination.read_text())
         self.assertNotIn("scenario", destination.read_text())
@@ -67,6 +70,27 @@ class OwnerAcceptanceTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "verification must pass"):
             record_acceptance(self.directory, SESSION_ID, "rejected", "unacceptable")
+
+    def test_rejects_missing_replacement_receipt(self):
+        receipt = self.directory / "replacement" / f"worker_replacement_{SESSION_ID}.json"
+        receipt.unlink()
+        with self.assertRaisesRegex(ValueError, "replacement receipt is required"):
+            record_acceptance(self.directory, SESSION_ID, "accepted", "acceptable")
+
+    def test_invalid_arguments_fail_before_receipt_io(self):
+        receipt = self.directory / "replacement" / f"worker_replacement_{SESSION_ID}.json"
+        receipt.unlink()
+        with self.assertRaisesRegex(ValueError, "Decision must"):
+            record_acceptance(self.directory, SESSION_ID, "maybe", "acceptable")
+
+    def test_rejects_scorecard_changed_after_replacement(self):
+        payload = valid_scorecard()
+        payload["evaluation"]["scores"]["clarity"] = 9
+        (self.directory / f"scorecard_{SESSION_ID}.json").write_text(
+            json.dumps(payload), encoding="utf-8"
+        )
+        with self.assertRaisesRegex(ValueError, "changed after worker replacement"):
+            record_acceptance(self.directory, SESSION_ID, "accepted", "acceptable")
 
     def test_acceptance_requires_acceptable_live_audio(self):
         with self.assertRaisesRegex(ValueError, "acceptable live audio"):
