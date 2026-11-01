@@ -13,6 +13,7 @@ if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from apps.livekit_agent.verify_scorecard import verify_scorecard
+from apps.livekit_agent.replacement_receipt import verify_replacement
 
 
 def record_acceptance(directory: Path, session_id: str, decision: str,
@@ -21,6 +22,9 @@ def record_acceptance(directory: Path, session_id: str, decision: str,
     evidence = verify_scorecard(directory, session_id)
     if evidence["status"] != "passed":
         raise ValueError("Retained scorecard verification must pass before acceptance is recorded")
+    replacement = verify_replacement(
+        directory, session_id, evidence["source_revision"]
+    )
     if decision not in ("accepted", "rejected"):
         raise ValueError("Decision must be accepted or rejected")
     if audio_quality not in ("acceptable", "unacceptable"):
@@ -45,6 +49,8 @@ def record_acceptance(directory: Path, session_id: str, decision: str,
         "live_audio_quality": audio_quality,
         "recorded_at": timestamp.isoformat().replace("+00:00", "Z"),
         "retained_scorecard_verified": True,
+        "worker_replacement_verified": True,
+        "replacement_verified_at": replacement["verified_at"].isoformat().replace("+00:00", "Z"),
         "limitations": [
             "This is a manually recorded owner attestation, not independent verification.",
             "It does not establish customer acceptance, payment, or revenue.",

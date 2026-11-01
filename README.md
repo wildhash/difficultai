@@ -231,17 +231,17 @@ checks local components and storage without credentials. Each run retains a JSON
 report under `$SCORECARD_DIR/preflight` with outcomes and the next action. See
 [preflight evidence and acceptance steps](docs/REPO_RESCUE_PREFLIGHT.md).
 
-After a real owner session, record the worker's 32-character session ID, replace
-or restart the worker with the same persistent volume mounted, and run:
+After a real owner session, record the worker's 32-character session ID and use
+the guarded replacement command:
 
 ```bash
-make verify-scorecard SESSION_ID=<session-id>
+make owner-pilot-replace SESSION_ID=<session-id>
 ```
 
-The verifier checks completion, two-way transcript structure, and the six-score
-evaluation contract without printing the private transcript, scenario, room, or
-provider error. A pass proves retention only if the worker was actually replaced;
-it does not prove audio quality or owner acceptance.
+The command verifies completion, two-way transcript structure, the six-score
+evaluation contract, the exact worker revision, and an unprinted private-file
+fingerprint before and after replacing only the worker. It then stores an
+immutable private replacement receipt on the persistent scorecard volume.
 
 After personally judging the live audio, record the owner outcome without notes
 or transcript content:
@@ -251,8 +251,8 @@ make record-owner-acceptance SESSION_ID=<session-id> \
   DECISION=accepted AUDIO_QUALITY=acceptable
 ```
 
-This command first requires the retained scorecard to pass verification, then
-writes an immutable, private-by-default self-attestation under
+This command requires both the retained scorecard and its bound replacement
+receipt to pass verification, then writes an immutable, private-by-default self-attestation under
 `$SCORECARD_DIR/acceptance`. It truthfully remains a manually recorded owner
 decision rather than independent customer, payment, or revenue evidence.
 

@@ -122,16 +122,24 @@ def replace_and_verify(session_id, *, root=ROOT, runner=subprocess.run,
                 raise IntegrityError("scorecard source revision changed across worker replacement")
             if before != after:
                 raise IntegrityError("retained scorecard changed across worker replacement")
-            return
+            break
         except IntegrityError:
             raise
         except ReplacementError as error:
             last_error = error
             if attempt + 1 < readiness_attempts:
                 sleeper(2)
-    raise ReplacementError(
-        "post-replacement readiness checks did not pass within the bounded retry window"
-    ) from last_error
+    else:
+        raise ReplacementError(
+            "post-replacement readiness checks did not pass within the bounded retry window"
+        ) from last_error
+    _run(
+        "Replacement receipt",
+        ("exec", "-T", "worker", "python", "-m",
+         "apps.livekit_agent.replacement_receipt", session_id,
+         "--source-revision", after_revision),
+        root=root, runner=runner,
+    )
 
 
 def main(argv=None):

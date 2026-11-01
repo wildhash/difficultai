@@ -674,3 +674,41 @@ check, and record the owner's separate acceptance decision.
 
 Rollback: revert this repair. It changes no image, scorecard, transcript, volume,
 or acceptance record and never invokes a volume-removal command.
+
+### 2026-11-01: require durable replacement evidence before owner acceptance
+
+Baseline: `89e375ae428a64ffcd05c65083633f8e37f315d9` (merged PR #27).
+All three repositories have no competing open work. The static pilot workflows
+are green; Docker and the four voice credentials remain unavailable here.
+
+Diagnosis: the replacement command proved revision-bound retention only in its
+terminal output. `record-owner-acceptance` independently rechecked the scorecard
+but did not require durable evidence that replacement had occurred. An operator
+could therefore skip the required replacement and still create an attestation.
+
+Alternatives: trust command history, add a manual confirmation flag, or retain a
+private receipt on the existing scorecard volume. The receipt provides the
+strongest executable link without publishing transcript-derived material.
+
+Decision: after a successful replacement comparison, write one immutable mode
+`0600` receipt bound to the session ID, source revision, private scorecard SHA-256,
+and UTC time. Owner acceptance now rejects missing, malformed, mismatched, or
+stale receipts and records that replacement verification passed. Neither command
+prints the private fingerprint, transcript, scenario, provider error, or path.
+
+Verification: regressions cover immutable and hard-link-free volume writes,
+revision mismatch, scorecard mutation after replacement, sanitized CLI output,
+receipt-command failure, and acceptance without a receipt. The full Python suite,
+offline preflight, and exact-head CI must pass before merge.
+
+Limitations: the receipt is locally recorded operational evidence, not an
+independent audit. Mocked command sequencing does not deploy a worker or establish
+credentials, live audio, real retention, owner acceptance, customers, payment,
+or revenue.
+
+Next executable step: deploy exact clean main on the intended Docker host with
+the four credentials, complete one real owner session, run
+`make owner-pilot-replace SESSION_ID=<id>`, then record the owner's decision.
+
+Rollback: revert this repair. Existing receipts and scorecards remain private on
+the named volume; the prior acceptance path will no longer require a receipt.
