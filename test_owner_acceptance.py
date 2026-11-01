@@ -77,6 +77,12 @@ class OwnerAcceptanceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "replacement receipt is required"):
             record_acceptance(self.directory, SESSION_ID, "accepted", "acceptable")
 
+    def test_invalid_arguments_fail_before_receipt_io(self):
+        receipt = self.directory / "replacement" / f"worker_replacement_{SESSION_ID}.json"
+        receipt.unlink()
+        with self.assertRaisesRegex(ValueError, "Decision must"):
+            record_acceptance(self.directory, SESSION_ID, "maybe", "acceptable")
+
     def test_rejects_scorecard_changed_after_replacement(self):
         payload = valid_scorecard()
         payload["evaluation"]["scores"]["clarity"] = 9

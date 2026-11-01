@@ -701,6 +701,10 @@ revision mismatch, scorecard mutation after replacement, sanitized CLI output,
 receipt-command failure, and acceptance without a receipt. The full Python suite,
 offline preflight, and exact-head CI must pass before merge.
 
+Review revision: fsync the receipt's parent directory after exclusive publication,
+require the receipt subprocess's sanitized success response to bind the expected
+session and revision, and validate acceptance arguments before evidence I/O.
+
 Limitations: the receipt is locally recorded operational evidence, not an
 independent audit. Mocked command sequencing does not deploy a worker or establish
 credentials, live audio, real retention, owner acceptance, customers, payment,

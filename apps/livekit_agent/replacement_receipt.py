@@ -50,6 +50,13 @@ def _publish_private_json(destination: Path, payload: dict) -> None:
                     target.flush()
                     os.fsync(target.fileno())
         os.unlink(temporary)
+        directory_descriptor = os.open(
+            destination.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        )
+        try:
+            os.fsync(directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
     except BaseException:
         try:
             os.unlink(temporary)

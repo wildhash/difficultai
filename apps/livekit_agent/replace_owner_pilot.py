@@ -133,13 +133,24 @@ def replace_and_verify(session_id, *, root=ROOT, runner=subprocess.run,
         raise ReplacementError(
             "post-replacement readiness checks did not pass within the bounded retry window"
         ) from last_error
-    _run(
+    receipt = _run(
         "Replacement receipt",
         ("exec", "-T", "worker", "python", "-m",
          "apps.livekit_agent.replacement_receipt", session_id,
          "--source-revision", after_revision),
         root=root, runner=runner,
     )
+    try:
+        receipt_report = json.loads(receipt.stdout or "")
+    except (TypeError, json.JSONDecodeError) as error:
+        raise ReplacementError("Replacement receipt output was invalid") from error
+    if (
+        not isinstance(receipt_report, dict)
+        or receipt_report.get("status") != "recorded"
+        or receipt_report.get("session_id") != session_id
+        or receipt_report.get("source_revision") != after_revision
+    ):
+        raise ReplacementError("Replacement receipt output was invalid")
 
 
 def main(argv=None):

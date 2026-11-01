@@ -19,18 +19,18 @@ from apps.livekit_agent.replacement_receipt import verify_replacement
 def record_acceptance(directory: Path, session_id: str, decision: str,
                       audio_quality: str, now=None) -> dict:
     """Write one immutable self-attestation after structural evidence passes."""
-    evidence = verify_scorecard(directory, session_id)
-    if evidence["status"] != "passed":
-        raise ValueError("Retained scorecard verification must pass before acceptance is recorded")
-    replacement = verify_replacement(
-        directory, session_id, evidence["source_revision"]
-    )
     if decision not in ("accepted", "rejected"):
         raise ValueError("Decision must be accepted or rejected")
     if audio_quality not in ("acceptable", "unacceptable"):
         raise ValueError("Audio quality must be acceptable or unacceptable")
     if decision == "accepted" and audio_quality != "acceptable":
         raise ValueError("An accepted session must have acceptable live audio")
+    evidence = verify_scorecard(directory, session_id)
+    if evidence["status"] != "passed":
+        raise ValueError("Retained scorecard verification must pass before acceptance is recorded")
+    replacement = verify_replacement(
+        directory, session_id, evidence["source_revision"]
+    )
 
     destination = directory / "acceptance" / f"owner_acceptance_{session_id}.json"
     if destination.exists():
