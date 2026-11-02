@@ -256,6 +256,15 @@ receipt to pass verification, then writes an immutable, private-by-default self-
 `$SCORECARD_DIR/acceptance`. It truthfully remains a manually recorded owner
 decision rather than independent customer, payment, or revenue evidence.
 
+Reverify the complete retained chain before reporting operational acceptance:
+
+```bash
+make verify-owner-acceptance SESSION_ID=<session-id>
+```
+
+This checks the scorecard, replacement receipt, attestation identity, evidence
+timestamps, and decision consistency without printing transcript or scenario text.
+
 For the owner pilot, copy scenario JSON from the deployed app into a local file
 and create the configured room plus a short-lived participant token with:
 

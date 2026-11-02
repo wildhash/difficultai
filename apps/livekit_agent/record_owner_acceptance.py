@@ -40,6 +40,8 @@ def record_acceptance(directory: Path, session_id: str, decision: str,
     if timestamp.tzinfo is None:
         raise ValueError("Acceptance timestamp must be timezone-aware")
     timestamp = timestamp.astimezone(timezone.utc)
+    if timestamp < replacement["verified_at"]:
+        raise ValueError("Acceptance timestamp cannot precede replacement verification")
     record = {
         "schema_version": 2,
         "evidence_type": "owner_self_attestation",
