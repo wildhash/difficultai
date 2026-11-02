@@ -1,4 +1,4 @@
-.PHONY: dev test smoke-test preflight-offline owner-pilot-deploy owner-pilot-replace owner-session verify-scorecard record-owner-acceptance opik-smoke-test opik-eval-suite install clean help
+.PHONY: dev test smoke-test preflight-offline owner-pilot-deploy owner-pilot-replace owner-session verify-scorecard record-owner-acceptance verify-owner-acceptance opik-smoke-test opik-eval-suite install clean help
 
 # Default target
 help:
@@ -12,6 +12,7 @@ help:
 	@echo "  make owner-session SCENARIO=<file> - Create a configured owner-pilot room and token"
 	@echo "  make verify-scorecard SESSION_ID=<id> - Verify retained owner-session evidence"
 	@echo "  make record-owner-acceptance SESSION_ID=<id> DECISION=<accepted|rejected> AUDIO_QUALITY=<acceptable|unacceptable>"
+	@echo "  make verify-owner-acceptance SESSION_ID=<id> - Reverify the retained acceptance chain"
 	@echo "  make opik-smoke-test  - Run Opik tracing smoke test (validate observability)"
 	@echo "  make opik-eval-suite  - Run Opik scorecard evals (dataset + experiment)"
 	@echo "  make test             - Run all tests"
@@ -58,6 +59,10 @@ record-owner-acceptance:
 	@test -n "$(AUDIO_QUALITY)" || (echo "AUDIO_QUALITY is required" >&2; exit 2)
 	python apps/livekit_agent/record_owner_acceptance.py "$(SESSION_ID)" \
 		--decision "$(DECISION)" --audio-quality "$(AUDIO_QUALITY)"
+
+verify-owner-acceptance:
+	@test -n "$(SESSION_ID)" || (echo "SESSION_ID is required" >&2; exit 2)
+	python apps/livekit_agent/verify_owner_acceptance.py "$(SESSION_ID)"
 
 # Run Opik tracing smoke test
 opik-smoke-test:

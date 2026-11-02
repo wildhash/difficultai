@@ -40,7 +40,10 @@ class OwnerAcceptanceTests(unittest.TestCase):
         (self.directory / f"scorecard_{SESSION_ID}.json").write_text(
             json.dumps(valid_scorecard()), encoding="utf-8"
         )
-        record_replacement(self.directory, SESSION_ID, "1" * 40)
+        record_replacement(
+            self.directory, SESSION_ID, "1" * 40,
+            now=datetime(2026, 10, 25, 14, 59, tzinfo=timezone.utc),
+        )
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -107,6 +110,13 @@ class OwnerAcceptanceTests(unittest.TestCase):
             record_acceptance(
                 self.directory, SESSION_ID, "accepted", "acceptable",
                 now=datetime(2026, 10, 25, 15, 0),
+            )
+
+    def test_rejects_acceptance_before_replacement(self):
+        with self.assertRaisesRegex(ValueError, "cannot precede"):
+            record_acceptance(
+                self.directory, SESSION_ID, "accepted", "acceptable",
+                now=datetime(2026, 10, 25, 14, 58, tzinfo=timezone.utc),
             )
 
     def test_exclusive_fallback_supports_volumes_without_hard_links(self):

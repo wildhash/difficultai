@@ -190,6 +190,9 @@ AUDIO_QUALITY=acceptable` (or record a rejection). The command requires a valid
 retained scorecard, stores no notes or transcript text, refuses to overwrite an
 existing decision for that session, and labels the result as a manual owner
 self-attestation rather than independent acceptance or commercial evidence.
+Run `make verify-owner-acceptance SESSION_ID=<session-id>` afterward and during
+later audits. It fails closed if the scorecard, replacement receipt, chronology,
+or attestation no longer agrees, without printing private conversation content.
 
 `make owner-pilot-deploy` must run from a clean Git checkout. It binds the
 image and worker environment to the exact 40-character commit SHA and verifies

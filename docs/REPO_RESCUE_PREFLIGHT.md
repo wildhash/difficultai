@@ -716,3 +716,42 @@ the four credentials, complete one real owner session, run
 
 Rollback: revert this repair. Existing receipts and scorecards remain private on
 the named volume; the prior acceptance path will no longer require a receipt.
+
+### 2026-11-02: make the retained acceptance chain re-verifiable
+
+Baseline: `71590267cf85463bc25a297f760c14f166f7baa1` (merged PR #28).
+Its Python, image, serialized Vite, and Pages workflows passed. No competing PR
+or issue exists across DifficultAI, RepoMan, or make_my_day. Docker and the four
+voice credentials remain unavailable in this environment.
+
+Diagnosis: the operator could create a revision-bound scorecard, immutable
+replacement receipt, and owner attestation, but there was no single executable
+check that those three retained artifacts still agreed. Later reporting could
+therefore rely on stale or internally inconsistent acceptance evidence.
+
+Alternatives: document manual file inspection, extend the public static app, or
+add a private local verifier beside the existing evidence commands. The local
+verifier is the smallest safe change and avoids publishing session material.
+
+Decision: add `make verify-owner-acceptance SESSION_ID=<id>`. It fails closed on
+scorecard or replacement changes, mismatched identity/revision, impossible
+decision and audio combinations, false evidence flags, or timestamps that do
+not match the replacement receipt and precede the attestation. Output contains
+only the session ID, public revision, decision, named checks, and limitations.
+Acceptance creation now also rejects a timestamp before replacement.
+
+Verification: focused regressions cover a valid chain, missing acceptance,
+tampered judgment and chronology, changed private scorecards, sanitized CLI
+output, and invalid IDs before path access. The full suite, offline preflight,
+and exact-head CI must pass before merge.
+
+Limitations: this verifies locally retained evidence, not a deployed worker or
+independent audit. No credentials, live audio, real scorecard, replacement,
+owner acceptance, customer activity, payment, or revenue were established.
+
+Next executable step: after merge, deploy exact clean main on the intended
+Docker host with all four credentials; complete one owner session, replacement,
+and decision; then run the new verifier against that retained session.
+
+Rollback: revert this repair. It reads but does not modify existing evidence;
+the earlier recording commands and private artifacts remain intact.
