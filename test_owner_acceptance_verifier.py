@@ -68,6 +68,22 @@ class OwnerAcceptanceVerifierTests(unittest.TestCase):
         self.assertEqual(report["checks"][-1]["name"], "acceptance_file")
         self.assertNotIn(str(self.directory), json.dumps(report))
 
+    def test_oversized_acceptance_fails_before_parsing(self):
+        self.acceptance.write_text("x" * (64 * 1024 + 1), encoding="utf-8")
+        report = verify_owner_acceptance(self.directory, SESSION_ID)
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["checks"][-1]["name"], "acceptance_file")
+        self.assertIn("exceeds", report["checks"][-1]["detail"])
+
+    def test_identity_mismatch_does_not_report_decision(self):
+        payload = json.loads(self.acceptance.read_text())
+        payload["session_id"] = "b" * 32
+        self.acceptance.write_text(json.dumps(payload), encoding="utf-8")
+        report = verify_owner_acceptance(self.directory, SESSION_ID)
+        self.assertEqual(report["status"], "failed")
+        self.assertIsNone(report["decision"])
+        self.assertEqual(report["checks"][-1]["name"], "identity")
+
     def test_tampered_judgment_and_chronology_fail(self):
         payload = json.loads(self.acceptance.read_text())
         payload["live_audio_quality"] = "unacceptable"

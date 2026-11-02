@@ -745,6 +745,10 @@ tampered judgment and chronology, changed private scorecards, sanitized CLI
 output, and invalid IDs before path access. The full suite, offline preflight,
 and exact-head CI must pass before merge.
 
+Review revision: bound acceptance reads to 64 KiB, treat unexpected malformed
+replacement types as sanitized failures, and stop before surfacing a decision
+when the attestation identity does not match the requested session and revision.
+
 Limitations: this verifies locally retained evidence, not a deployed worker or
 independent audit. No credentials, live audio, real scorecard, replacement,
 owner acceptance, customer activity, payment, or revenue were established.

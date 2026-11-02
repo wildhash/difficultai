@@ -15,6 +15,9 @@ from apps.livekit_agent.replacement_receipt import verify_replacement
 from apps.livekit_agent.verify_scorecard import SESSION_ID, verify_scorecard
 
 
+MAX_ACCEPTANCE_BYTES = 64 * 1024
+
+
 def _timestamp(value):
     if not isinstance(value, str):
         return None
@@ -46,7 +49,7 @@ def verify_owner_acceptance(directory: Path, session_id: str) -> dict:
 
     try:
         replacement = verify_replacement(directory, session_id, scorecard["source_revision"])
-    except (OSError, ValueError):
+    except (OSError, ValueError, KeyError, TypeError):
         record("worker_replacement", False,
                "Worker replacement receipt is missing, invalid, or stale.")
         return _report(session_id, checks)
@@ -55,6 +58,9 @@ def verify_owner_acceptance(directory: Path, session_id: str) -> dict:
 
     source = directory / "acceptance" / f"owner_acceptance_{session_id}.json"
     try:
+        if source.stat().st_size > MAX_ACCEPTANCE_BYTES:
+            record("acceptance_file", False, "Owner acceptance exceeds the expected size.")
+            return _report(session_id, checks)
         payload = json.loads(source.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         record("acceptance_file", False,
@@ -73,6 +79,8 @@ def verify_owner_acceptance(directory: Path, session_id: str) -> dict:
     )
     record("identity", identity_valid,
            "Owner acceptance matches the session and exact source revision.")
+    if not identity_valid:
+        return _report(session_id, checks)
 
     decision = payload.get("decision")
     audio_quality = payload.get("live_audio_quality")
