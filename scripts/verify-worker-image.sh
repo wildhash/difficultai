@@ -4,6 +4,7 @@ set -eu
 image="${1:-difficultai-owner-pilot:verify}"
 project="difficultai-worker-verify-$$"
 marker="/data/scorecards/container-replacement-fixture"
+fixture_session="cccccccccccccccccccccccccccccccc"
 created_env=0
 
 cleanup() {
@@ -63,4 +64,43 @@ $compose run --rm --no-deps worker \
 $compose run --rm --no-deps worker \
   python -c "from pathlib import Path; assert Path('$marker').read_text(encoding='utf-8') == 'fixture'"
 
-echo "worker image and replacement-volume fixture verified"
+# Exercise the complete private evidence chain through separate containers on
+# the configured volume. This is an internal fixture, not a real voice session,
+# owner decision, customer acceptance, payment, or revenue evidence.
+$compose run --rm --no-deps -T worker \
+  python - "$fixture_session" "$DIFFICULTAI_BUILD_SHA" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+from difficultai.scorecard import SCORECARD_DIMENSIONS
+
+session_id, source_revision = sys.argv[1:]
+scorecard = {
+    "session_id": session_id,
+    "source_revision": source_revision,
+    "status": "completed",
+    "error": None,
+    "scenario": {"fixture": True},
+    "transcript": [
+        {"role": "user", "content": "internal CI fixture user turn"},
+        {"role": "assistant", "content": "internal CI fixture assistant turn"},
+    ],
+    "evaluation": {
+        "scores": {name: 8 for name in SCORECARD_DIMENSIONS},
+        "feedback": {"coaching_points": ["fixture one", "fixture two", "fixture three"]},
+    },
+}
+destination = Path("/data/scorecards") / f"scorecard_{session_id}.json"
+destination.write_text(json.dumps(scorecard), encoding="utf-8")
+PY
+$compose run --rm --no-deps worker \
+  python apps/livekit_agent/replacement_receipt.py "$fixture_session" \
+    --source-revision "$DIFFICULTAI_BUILD_SHA" >/dev/null
+$compose run --rm --no-deps worker \
+  python apps/livekit_agent/record_owner_acceptance.py "$fixture_session" \
+    --decision accepted --audio-quality acceptable >/dev/null
+$compose run --rm --no-deps worker \
+  python apps/livekit_agent/verify_owner_acceptance.py "$fixture_session" >/dev/null
+
+echo "worker image and internal acceptance-chain fixture verified"
