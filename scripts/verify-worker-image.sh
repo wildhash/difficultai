@@ -67,7 +67,7 @@ $compose run --rm --no-deps worker \
 # Exercise the complete private evidence chain through separate containers on
 # the configured volume. This is an internal fixture, not a real voice session,
 # owner decision, customer acceptance, payment, or revenue evidence.
-$compose run --rm --no-deps worker \
+$compose run --rm --no-deps -T worker \
   python - "$fixture_session" "$DIFFICULTAI_BUILD_SHA" <<'PY'
 import json
 from pathlib import Path

@@ -784,9 +784,14 @@ record an explicit fixture acceptance in a third, and verify the complete chain
 in a fourth. The script labels the result as an internal fixture and deletes its
 isolated volume during cleanup.
 
-Verification: the deployment regression requires all three evidence commands,
-the fixture label, and at least ten separate Compose runs. Local Python tests,
-offline preflight, shell syntax, and exact-head image CI must pass before merge.
+Verification: the deployment regression requires scorecard creation, all three
+evidence commands, the fixture label, and non-TTY stdin forwarding. Local Python
+tests, offline preflight, shell syntax, and exact-head image CI must pass before
+merge.
+
+Review revision: disable pseudo-TTY allocation for the heredoc container so CI
+forwards the fixture deterministically, and assert the specific scorecard and
+evidence commands instead of coupling the regression to a raw run-count total.
 
 Limitations: this is an internal deterministic fixture. It does not deploy the
 long-running worker or establish credentials, provider access, live audio, a
