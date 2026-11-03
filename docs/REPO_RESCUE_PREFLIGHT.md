@@ -759,3 +759,43 @@ and decision; then run the new verifier against that retained session.
 
 Rollback: revert this repair. It reads but does not modify existing evidence;
 the earlier recording commands and private artifacts remain intact.
+
+### 2026-11-03: exercise the acceptance chain on the Compose volume
+
+Baseline: `ed1db48654e704e975a509c1dca308539d9ded14` (merged PR #29).
+Its Python/image and both Pages workflows passed. DifficultAI, RepoMan, and
+make_my_day have no competing open PR or issue. Docker and the four voice
+credentials remain unavailable in this execution environment.
+
+Diagnosis: image CI proved only that a generic marker file remained visible to
+two containers. It never exercised the required scorecard, immutable replacement
+receipt, owner attestation, and final verifier through the configured Compose
+volume. Unit tests therefore covered evidence logic while deployment CI covered
+only shallow storage wiring.
+
+Alternatives: leave the layers independently tested, add another host-only unit
+test, or rehearse the private evidence chain in separate image containers. The
+Compose rehearsal gives the strongest credential-free deployment evidence and
+uses the existing isolated fixture volume and cleanup path.
+
+Decision: after image and offline checks, create a revision-bound internal
+scorecard fixture in one container, record its replacement receipt in a second,
+record an explicit fixture acceptance in a third, and verify the complete chain
+in a fourth. The script labels the result as an internal fixture and deletes its
+isolated volume during cleanup.
+
+Verification: the deployment regression requires all three evidence commands,
+the fixture label, and at least ten separate Compose runs. Local Python tests,
+offline preflight, shell syntax, and exact-head image CI must pass before merge.
+
+Limitations: this is an internal deterministic fixture. It does not deploy the
+long-running worker or establish credentials, provider access, live audio, a
+real scorecard, actual replacement, owner acceptance, customer activity,
+payment, or revenue.
+
+Next executable step: after merge, deploy exact clean main on the intended
+Docker host with the four credentials, complete the real owner workflow, and
+run `make verify-owner-acceptance SESSION_ID=<id>` against its retained volume.
+
+Rollback: revert this CI rehearsal. It creates and removes only the isolated CI
+Compose project and volume; production images and private evidence are untouched.
