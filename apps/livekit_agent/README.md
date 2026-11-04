@@ -194,6 +194,13 @@ Run `make verify-owner-acceptance SESSION_ID=<session-id>` afterward and during
 later audits. It fails closed if the scorecard, replacement receipt, chronology,
 or attestation no longer agrees, without printing private conversation content.
 
+Run `make owner-pilot-ready` first. It performs no build, service start, or
+provider request and reports only missing or invalid configuration names. It
+requires a clean Git revision, the four credential names in `.env`, a reachable
+Docker Engine with Compose, and a renderable owner-pilot configuration. A
+passing readiness report does not validate credential values or claim a
+deployment.
+
 `make owner-pilot-deploy` must run from a clean Git checkout. It binds the
 image and worker environment to the exact 40-character commit SHA and verifies
 that identity after startup. Each new scorecard records that public source

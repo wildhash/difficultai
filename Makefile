@@ -1,4 +1,4 @@
-.PHONY: dev test smoke-test preflight-offline owner-pilot-deploy owner-pilot-replace owner-session verify-scorecard record-owner-acceptance verify-owner-acceptance opik-smoke-test opik-eval-suite install clean help
+.PHONY: dev test smoke-test preflight-offline owner-pilot-ready owner-pilot-deploy owner-pilot-replace owner-session verify-scorecard record-owner-acceptance verify-owner-acceptance opik-smoke-test opik-eval-suite install clean help
 
 # Default target
 help:
@@ -7,6 +7,7 @@ help:
 	@echo "  make dev              - Start the LiveKit agent in development mode"
 	@echo "  make smoke-test       - Check local components, storage, and LiveKit connectivity"
 	@echo "  make preflight-offline - Check local components and storage without credentials"
+	@echo "  make owner-pilot-ready - Report source, credential-name, Docker, and Compose blockers"
 	@echo "  make owner-pilot-deploy - Validate, preflight, and start the Compose worker"
 	@echo "  make owner-pilot-replace SESSION_ID=<id> - Replace worker and verify retained evidence"
 	@echo "  make owner-session SCENARIO=<file> - Create a configured owner-pilot room and token"
@@ -38,6 +39,9 @@ preflight-offline:
 	python apps/livekit_agent/smoke_test.py --offline
 
 # Build and start only after credentialed LiveKit connectivity passes.
+owner-pilot-ready:
+	python apps/livekit_agent/check_owner_pilot_readiness.py
+
 owner-pilot-deploy:
 	python apps/livekit_agent/deploy_owner_pilot.py
 
