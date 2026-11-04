@@ -833,6 +833,10 @@ missing credential names, a dirty checkout, and invalid Compose; the passing
 fixture requires every prerequisite. The full Python suite, offline preflight,
 and exact-head CI must pass before merge.
 
+Review revision: bound Docker and Compose probes to 30 seconds, map Git/Docker
+subprocess failures to sanitized checks, and lock process-environment precedence
+to Docker Compose semantics with a regression.
+
 Limitations: readiness does not validate credentials, build or deploy a worker,
 contact LiveKit/OpenAI, exercise live audio, retain a real scorecard, establish
 owner acceptance, customer activity, payment, or revenue.

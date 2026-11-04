@@ -18,13 +18,16 @@ OPENAI_API_KEY=fixture-openai
 
 
 class RecordingRunner:
-    def __init__(self, *, docker=True, compose=True):
+    def __init__(self, *, docker=True, compose=True, error=None):
         self.docker = docker
         self.compose = compose
+        self.error = error
         self.calls = []
 
     def __call__(self, command, **kwargs):
         self.calls.append((tuple(command), kwargs))
+        if self.error:
+            raise self.error
         if command[:2] == ["docker", "compose"] and command[-1] == "version":
             success = self.docker
         elif command[:2] == ["docker", "info"]:
@@ -35,10 +38,13 @@ class RecordingRunner:
 
 
 class RecordingGit:
-    def __init__(self, *, dirty=False):
+    def __init__(self, *, dirty=False, error=None):
         self.dirty = dirty
+        self.error = error
 
     def __call__(self, command, **kwargs):
+        if self.error:
+            raise self.error
         stdout = REVISION + "\n" if "rev-parse" in command else (" M private.py\n" if self.dirty else "")
         return SimpleNamespace(returncode=0, stdout=stdout)
 
@@ -104,6 +110,31 @@ class OwnerPilotReadinessTests(unittest.TestCase):
         self.assertFalse(report["ready"])
         self.assertEqual(report["checks"][-1]["status"], "failed")
         self.assertIn("Compose", report["next_action"])
+
+    def test_subprocess_timeouts_become_sanitized_blockers(self):
+        self.configure()
+        report = check_readiness(
+            root=self.root, runner=RecordingRunner(error=TimeoutError("private docker")),
+            git_runner=RecordingGit(error=TimeoutError("private git")), environ={},
+        )
+        self.assertFalse(report["ready"])
+        rendered = str(report)
+        self.assertNotIn("private", rendered)
+        self.assertEqual(report["checks"][0]["status"], "failed")
+        self.assertEqual(report["checks"][2]["status"], "failed")
+
+    def test_process_environment_precedence_matches_compose(self):
+        self.configure(CONFIGURATION.replace(
+            "LIVEKIT_URL=wss://fixture.livekit.cloud",
+            "LIVEKIT_URL=https://invalid-from-file.example",
+        ))
+        runner = RecordingRunner()
+        report = check_readiness(
+            root=self.root, runner=runner, git_runner=RecordingGit(),
+            environ={"LIVEKIT_URL": "wss://exported.livekit.cloud"},
+        )
+        self.assertTrue(report["ready"])
+        self.assertTrue(all(call[1].get("timeout") == 30 for call in runner.calls))
 
 
 if __name__ == "__main__":

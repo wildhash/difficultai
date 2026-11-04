@@ -23,9 +23,9 @@ def _run_quiet(command, *, root, runner, environment):
     try:
         result = runner(
             command, cwd=root, check=False, capture_output=True, text=True,
-            env=environment,
+            env=environment, timeout=30,
         )
-    except OSError:
+    except (OSError, subprocess.SubprocessError):
         return False
     return result.returncode == 0
 
@@ -40,7 +40,7 @@ def check_readiness(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.r
     try:
         revision = _source_revision(root, git_runner)
         checks.append(_check("source", "passed", "Checkout is clean and bound to a Git revision."))
-    except DeploymentError:
+    except (DeploymentError, OSError, subprocess.SubprocessError):
         checks.append(_check(
             "source", "failed", "Checkout is not a clean identifiable Git revision.",
             "Use a clean checkout of the intended commit.",
@@ -51,6 +51,7 @@ def check_readiness(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.r
     if env_path.is_file():
         try:
             file_values = {key: value or "" for key, value in dotenv_values(env_path).items()}
+            # Match Docker Compose: process values override the project .env file.
             configured = {**file_values, **configured}
             issues = environment_issues(configured)
         except (OSError, ValueError):
