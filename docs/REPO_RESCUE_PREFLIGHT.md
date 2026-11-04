@@ -804,3 +804,47 @@ run `make verify-owner-acceptance SESSION_ID=<id>` against its retained volume.
 
 Rollback: revert this CI rehearsal. It creates and removes only the isolated CI
 Compose project and volume; production images and private evidence are untouched.
+
+### 2026-11-04: make the deployment blocker executable before build
+
+Baseline: `de66f8e06d24489bcda01f6302734e70aaf8dd44` (merged PR #30).
+Its Python/image and both Pages workflows passed. DifficultAI, RepoMan, and
+make_my_day have no competing open PR or issue. This environment still has no
+Docker executable or four voice credentials, so a real worker deployment cannot
+be attempted here.
+
+Diagnosis: `owner-pilot-deploy` fails closed, but the operator had no read-only
+command that reported all host prerequisites before a potentially expensive
+image build. The checked-in evidence therefore could not turn the known generic
+"Docker host plus credentials" blocker into a precise, repeatable handoff.
+
+Alternatives: repeat the written checklist, add provider probes, or add a local
+readiness gate. Provider probes need secrets and service I/O; the local gate is
+the smallest safe change and can validate the exact host without deploying.
+
+Decision: add `make owner-pilot-ready`. It checks a clean source revision,
+credential names and LiveKit URL shape without printing values, Docker Engine
+and Compose reachability, and Compose rendering. It never builds, starts, stops,
+or contacts providers, and its report states the deployment and acceptance
+boundaries.
+
+Verification: regressions reproduce the present missing `.env`/Docker blockers,
+missing credential names, a dirty checkout, and invalid Compose; the passing
+fixture requires every prerequisite. The full Python suite, offline preflight,
+and exact-head CI must pass before merge.
+
+Review revision: bound Docker and Compose probes to 30 seconds, map Git/Docker
+subprocess failures to sanitized checks, and lock process-environment precedence
+to Docker Compose semantics with a regression.
+
+Limitations: readiness does not validate credentials, build or deploy a worker,
+contact LiveKit/OpenAI, exercise live audio, retain a real scorecard, establish
+owner acceptance, customer activity, payment, or revenue.
+
+Next executable step: on the intended Docker host, run
+`make owner-pilot-ready`, correct only the named blockers, then run
+`make owner-pilot-deploy` and complete the real owner workflow.
+
+Rollback: revert this readiness command and documentation. It reads local state
+only and creates, changes, starts, or removes no credential, image, service,
+volume, or evidence file.
