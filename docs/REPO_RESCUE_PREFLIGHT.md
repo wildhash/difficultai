@@ -872,6 +872,8 @@ Decision: before `deploy-pages`, wait up to 60 seconds for a non-expired
 `github-pages` artifact belonging to the current workflow run. Retry empty
 lists, rate limits, and server errors; fail closed on permanent API errors,
 malformed responses, or timeout. The gate logs only the public artifact ID.
+Each request receives an abort signal for the remaining overall budget, and
+network and JSON failures are reported without raw intermediary details.
 
 Verification: web component tests, 14 Node deployment regressions, the
 Pages-mode production build, the full Python suite, offline preflight, and

@@ -10,6 +10,7 @@ export async function waitForPagesArtifact({
   fetchImpl = fetch,
   sleep = wait,
   now = Date.now,
+  abortAfter = AbortSignal.timeout,
   timeoutMilliseconds = 60_000,
   pollMilliseconds = 2_000,
 }) {
@@ -23,13 +24,26 @@ export async function waitForPagesArtifact({
     '?name=github-pages&per_page=100';
 
   while (now() - started < timeoutMilliseconds) {
-    const response = await fetchImpl(endpoint, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${token}`,
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    });
+    const remaining = Math.max(1, timeoutMilliseconds - (now() - started));
+    const signal = abortAfter(remaining);
+    let response;
+    try {
+      response = await fetchImpl(endpoint, {
+        signal,
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${token}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      });
+    } catch {
+      if (signal.aborted) {
+        throw new Error(
+          `github-pages artifact was not visible within ${timeoutMilliseconds}ms`,
+        );
+      }
+      throw new Error('Pages artifact lookup request failed');
+    }
     if (response.status === 429 || response.status >= 500) {
       await sleep(pollMilliseconds);
       continue;
@@ -38,7 +52,12 @@ export async function waitForPagesArtifact({
       throw new Error(`Pages artifact lookup failed with HTTP ${response.status}`);
     }
 
-    const payload = await response.json();
+    let payload;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new Error('Pages artifact lookup returned malformed JSON');
+    }
     if (!Array.isArray(payload.artifacts)) {
       throw new Error('Pages artifact lookup returned an invalid Actions payload');
     }
