@@ -57,7 +57,10 @@ Pull requests run tests and build the Pages variant with read-only permissions.
 Pushes or manual runs on `main` reach the deployment job. While the repository
 retains its legacy branch-based Pages source, a push deployment waits for the
 matching automatic `pages build and deployment` run to finish, then publishes
-and verifies Vite. If no matching legacy run appears during the bounded discovery
+and verifies Vite. Before deployment it also waits for the uploaded
+`github-pages` artifact to become visible through the Actions API; this prevents
+a rerun from reaching `deploy-pages` before GitHub exposes the completed build's
+artifact. If no matching legacy run appears during the bounded discovery
 window, deployment proceeds. Changing Settings -> Pages -> Source to **GitHub
 Actions** removes the legacy publication and therefore the wait.
 

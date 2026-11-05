@@ -848,3 +848,44 @@ Next executable step: on the intended Docker host, run
 Rollback: revert this readiness command and documentation. It reads local state
 only and creates, changes, starts, or removes no credential, image, service,
 volume, or evidence file.
+
+### 2026-11-05: gate deployment on Pages artifact visibility
+
+Baseline: `fb59dd838c75610d6fe57d263e2b2e9b28f92bd9` (merged PR #31).
+Its Python/image workflow and the separate legacy Pages publication passed, but
+the custom Vite deployment failed while GitHub's Pages API returned HTTP 500.
+One targeted failed-job rerun a day later exposed a different deterministic
+failure: the build job passed and uploaded `github-pages`, while the dependent
+deploy job immediately listed zero artifacts and stopped before publication.
+
+Diagnosis: job dependency completion does not guarantee that the Actions
+artifact-list API already exposes the completed upload. `deploy-pages` performs
+its artifact lookup once, so an otherwise valid rerun can fail during this
+short visibility window.
+
+Alternatives: keep rerunning an unchanged deployment, add an unbounded sleep,
+or poll the exact run for its named artifact. Repeated reruns do not remove the
+race and a fixed sleep cannot prove readiness. Polling the existing read-only
+Actions API is bounded, specific, and preserves the current architecture.
+
+Decision: before `deploy-pages`, wait up to 60 seconds for a non-expired
+`github-pages` artifact belonging to the current workflow run. Retry empty
+lists, rate limits, and server errors; fail closed on permanent API errors,
+malformed responses, or timeout. The gate logs only the public artifact ID.
+
+Verification: web component tests, 14 Node deployment regressions, the
+Pages-mode production build, the full Python suite, offline preflight, and
+exact-head PR CI must pass. After merge, the custom workflow must publish and
+public verification must pass before the Vite app is called deployed.
+
+Limitations: this closes artifact visibility only. It does not prevent a later
+GitHub Pages service error or establish a credentialed worker, live audio,
+retained real scorecard, owner acceptance, customer activity, payment, or
+revenue.
+
+Next executable step: merge only after exact-head CI and review, then verify the
+post-merge custom Pages run and public Vite assets. Independently, the owner
+pilot still requires the intended Docker host and four voice credentials.
+
+Rollback: revert this repair to remove the read-only visibility gate. It does
+not modify Pages settings, artifacts, deployments, credentials, or evidence.

@@ -91,6 +91,14 @@ jobs:
           token: ${{ secrets.PAGES_ENABLEMENT_TOKEN || github.token }}
           enablement: true
 
+      - name: Wait for Pages artifact visibility
+        working-directory: apps/web/demo
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: node scripts/wait-for-pages-artifact.mjs
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

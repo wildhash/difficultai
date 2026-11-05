@@ -74,12 +74,17 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertEqual(deploy.get("permissions", {}).get("actions"), "read")
         contents = " ".join(raw.split())
         self.assertIn("node scripts/wait-for-legacy-pages.mjs", contents)
+        self.assertIn("node scripts/wait-for-pages-artifact.mjs", contents)
         self.assertIn("if: github.event_name == 'push'", contents)
-        for variable in ("GH_TOKEN", "REPOSITORY", "COMMIT_SHA"):
+        for variable in ("GH_TOKEN", "REPOSITORY", "COMMIT_SHA", "RUN_ID"):
             self.assertIn(variable, contents)
         self.assertTrue(
             (ROOT / "apps" / "web" / "demo" / "scripts" /
              "wait-for-legacy-pages.mjs").is_file()
+        )
+        self.assertTrue(
+            (ROOT / "apps" / "web" / "demo" / "scripts" /
+             "wait-for-pages-artifact.mjs").is_file()
         )
 
 
