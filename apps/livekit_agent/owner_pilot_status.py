@@ -36,15 +36,23 @@ def owner_pilot_status(directory: Path, session_id: str) -> dict:
             "Complete the live owner session, then rerun this status command.",
         )
 
-    scorecard = verify_scorecard(directory, session_id)
-    if scorecard["status"] != "passed":
+    try:
+        scorecard = verify_scorecard(directory, session_id)
+        scorecard_status = scorecard["status"]
+        revision = scorecard["source_revision"]
+    except (OSError, ValueError, KeyError, TypeError):
+        checks.append({"name": "scorecard", "status": "invalid"})
+        return _report(
+            session_id, "evidence_invalid", "blocked", checks,
+            "Do not claim completion; repair the scorecard failure or repeat the owner session.",
+        )
+    if scorecard_status != "passed":
         checks.append({"name": "scorecard", "status": "invalid"})
         return _report(
             session_id, "evidence_invalid", "blocked", checks,
             "Do not claim completion; repair the scorecard failure or repeat the owner session.",
         )
     checks.append({"name": "scorecard", "status": "verified"})
-    revision = scorecard["source_revision"]
 
     replacement_path = (
         directory / "replacement" / f"worker_replacement_{session_id}.json"
@@ -86,8 +94,18 @@ def owner_pilot_status(directory: Path, session_id: str) -> dict:
             source_revision=revision,
         )
 
-    acceptance = verify_owner_acceptance(directory, session_id)
-    if acceptance["status"] != "passed":
+    try:
+        acceptance = verify_owner_acceptance(directory, session_id)
+        acceptance_status = acceptance["status"]
+        decision = acceptance["decision"]
+    except (OSError, ValueError, KeyError, TypeError):
+        checks.append({"name": "owner_acceptance", "status": "invalid"})
+        return _report(
+            session_id, "evidence_invalid", "blocked", checks,
+            "Do not claim acceptance; inspect the private evidence and repeat the owner workflow.",
+            source_revision=revision,
+        )
+    if acceptance_status != "passed":
         checks.append({"name": "owner_acceptance", "status": "invalid"})
         return _report(
             session_id, "evidence_invalid", "blocked", checks,
@@ -99,7 +117,7 @@ def owner_pilot_status(directory: Path, session_id: str) -> dict:
         session_id, "acceptance_verified", "verified", checks,
         "Preserve the private evidence according to the owner's retention policy.",
         source_revision=revision,
-        decision=acceptance["decision"],
+        decision=decision,
     )
 
 

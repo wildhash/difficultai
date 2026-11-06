@@ -97,6 +97,29 @@ class OwnerPilotStatusTests(unittest.TestCase):
         self.assertNotIn("private only", rendered)
         self.assertNotIn(str(self.directory), rendered)
 
+    def test_malformed_scorecard_blocks_without_leaking_private_path(self):
+        self.scorecard.write_text("{private broken json", encoding="utf-8")
+        report = owner_pilot_status(self.directory, SESSION_ID)
+        self.assertEqual(report["stage"], "evidence_invalid")
+        self.assertEqual(report["status"], "blocked")
+        self.assertNotIn(str(self.directory), json.dumps(report))
+
+    def test_malformed_acceptance_blocks_without_leaking_private_path(self):
+        self.scorecard.write_text(json.dumps(valid_scorecard()), encoding="utf-8")
+        record_replacement(
+            self.directory, SESSION_ID, REVISION,
+            now=datetime(2026, 11, 6, 15, 0, tzinfo=timezone.utc),
+        )
+        acceptance = (
+            self.directory / "acceptance" / f"owner_acceptance_{SESSION_ID}.json"
+        )
+        acceptance.parent.mkdir(parents=True)
+        acceptance.write_text("{private broken json", encoding="utf-8")
+        report = owner_pilot_status(self.directory, SESSION_ID)
+        self.assertEqual(report["stage"], "evidence_invalid")
+        self.assertEqual(report["status"], "blocked")
+        self.assertNotIn(str(self.directory), json.dumps(report))
+
     def test_inaccessible_evidence_is_not_reported_as_missing(self):
         with patch.object(Path, "stat", side_effect=PermissionError("private path")):
             report = owner_pilot_status(self.directory, SESSION_ID)
