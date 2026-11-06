@@ -61,10 +61,22 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn("down --volumes --remove-orphans", contents)
         self.assertIn("scripts/verify-worker-image.sh", workflow.read_text(encoding="utf-8"))
 
-    def test_owner_pilot_status_is_exposed_as_an_operator_command(self):
+    def test_owner_evidence_commands_use_the_deployed_volume(self):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        normalized = " ".join(makefile.split())
         self.assertIn("owner-pilot-status:", makefile)
-        self.assertIn("apps/livekit_agent/owner_pilot_status.py", makefile)
+        self.assertIn(
+            "OWNER_PILOT_COMPOSE = docker compose --file compose.owner-pilot.yml",
+            makefile,
+        )
+        for module in (
+            "owner_pilot_status", "verify_scorecard",
+            "record_owner_acceptance", "verify_owner_acceptance",
+        ):
+            self.assertIn(
+                f"$(OWNER_PILOT_COMPOSE) exec -T worker python -m apps.livekit_agent.{module}",
+                normalized,
+            )
         self.assertIn('SESSION_ID is required', makefile)
 
     def test_vite_waits_for_legacy_pages_publication(self):

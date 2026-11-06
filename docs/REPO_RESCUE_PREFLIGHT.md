@@ -902,8 +902,10 @@ unrun in this environment.
 
 Diagnosis: the operator path has strong gates for each individual stage, but no
 single read-only command identifies where a specific interrupted session should
-resume. An operator could repeat an immutable evidence write, skip replacement,
-or mistake a missing future artifact for invalid retained evidence.
+resume. The evidence Make targets also ran on the host even though deployed
+evidence is retained only in the Compose volume at `/data/scorecards`. An
+operator could inspect the wrong directory, repeat an immutable evidence write,
+skip replacement, or mistake a missing future artifact for invalid evidence.
 
 Alternatives: rely on the written runbook, combine all mutating steps into one
 command, or add a read-only state inspector. The inspector is the smallest safe
@@ -912,13 +914,16 @@ and no provider or deployment action occurs.
 
 Decision: add `make owner-pilot-status SESSION_ID=<id>`. It validates the session
 ID before path access, distinguishes absent future stages from invalid or
-inaccessible existing evidence, reuses the scorecard, replacement, and acceptance verifiers, and emits
-the exact next command or decision step. Output excludes transcripts, scenarios,
-fingerprints, credential values, and private paths.
+inaccessible existing evidence, reuses the scorecard, replacement, and acceptance
+verifiers, and emits the exact next command or decision step. Status, scorecard
+verification, acceptance recording, and final verification now execute inside
+the running worker so they share its retained Compose volume. Output excludes
+transcripts, scenarios, fingerprints, credential values, and private paths.
 
 Verification: regressions cover invalid IDs, missing sessions, scorecard-ready,
-replacement-ready, fully verified, corrupt or inaccessible evidence, and sanitized CLI output.
-The full Python suite, offline preflight, and exact-head CI must pass before merge.
+replacement-ready, fully verified, corrupt or inaccessible evidence, sanitized
+CLI output, and Compose-volume routing for all evidence commands. The full Python
+suite, offline preflight, and exact-head CI must pass before merge.
 
 Limitations: the status command is a local evidence navigator, not a deployment,
 provider test, live-audio result, independent audit, customer acceptance, payment,

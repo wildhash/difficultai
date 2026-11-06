@@ -1,5 +1,7 @@
 .PHONY: dev test smoke-test preflight-offline owner-pilot-ready owner-pilot-deploy owner-pilot-replace owner-pilot-status owner-session verify-scorecard record-owner-acceptance verify-owner-acceptance opik-smoke-test opik-eval-suite install clean help
 
+OWNER_PILOT_COMPOSE = docker compose --file compose.owner-pilot.yml
+
 # Default target
 help:
 	@echo "DifficultAI LiveKit Agent - Available Commands:"
@@ -52,7 +54,7 @@ owner-pilot-replace:
 
 owner-pilot-status:
 	@test -n "$(SESSION_ID)" || (echo "SESSION_ID is required" >&2; exit 2)
-	python apps/livekit_agent/owner_pilot_status.py "$(SESSION_ID)"
+	$(OWNER_PILOT_COMPOSE) exec -T worker python -m apps.livekit_agent.owner_pilot_status "$(SESSION_ID)"
 
 owner-session:
 	@test -n "$(SCENARIO)" || (echo "SCENARIO is required" >&2; exit 2)
@@ -60,18 +62,18 @@ owner-session:
 
 verify-scorecard:
 	@test -n "$(SESSION_ID)" || (echo "SESSION_ID is required" >&2; exit 2)
-	python apps/livekit_agent/verify_scorecard.py "$(SESSION_ID)"
+	$(OWNER_PILOT_COMPOSE) exec -T worker python -m apps.livekit_agent.verify_scorecard "$(SESSION_ID)"
 
 record-owner-acceptance:
 	@test -n "$(SESSION_ID)" || (echo "SESSION_ID is required" >&2; exit 2)
 	@test -n "$(DECISION)" || (echo "DECISION is required" >&2; exit 2)
 	@test -n "$(AUDIO_QUALITY)" || (echo "AUDIO_QUALITY is required" >&2; exit 2)
-	python apps/livekit_agent/record_owner_acceptance.py "$(SESSION_ID)" \
+	$(OWNER_PILOT_COMPOSE) exec -T worker python -m apps.livekit_agent.record_owner_acceptance "$(SESSION_ID)" \
 		--decision "$(DECISION)" --audio-quality "$(AUDIO_QUALITY)"
 
 verify-owner-acceptance:
 	@test -n "$(SESSION_ID)" || (echo "SESSION_ID is required" >&2; exit 2)
-	python apps/livekit_agent/verify_owner_acceptance.py "$(SESSION_ID)"
+	$(OWNER_PILOT_COMPOSE) exec -T worker python -m apps.livekit_agent.verify_owner_acceptance "$(SESSION_ID)"
 
 # Run Opik tracing smoke test
 opik-smoke-test:
