@@ -1,4 +1,6 @@
-.PHONY: dev test smoke-test preflight-offline owner-pilot-ready owner-pilot-deploy owner-pilot-replace owner-session verify-scorecard record-owner-acceptance verify-owner-acceptance opik-smoke-test opik-eval-suite install clean help
+.PHONY: dev test smoke-test preflight-offline owner-pilot-ready owner-pilot-deploy owner-pilot-replace owner-pilot-status owner-session verify-scorecard record-owner-acceptance verify-owner-acceptance opik-smoke-test opik-eval-suite install clean help
+
+OWNER_PILOT_COMPOSE = docker compose --file compose.owner-pilot.yml
 
 # Default target
 help:
@@ -10,6 +12,7 @@ help:
 	@echo "  make owner-pilot-ready - Report source, credential-name, Docker, and Compose blockers"
 	@echo "  make owner-pilot-deploy - Validate, preflight, and start the Compose worker"
 	@echo "  make owner-pilot-replace SESSION_ID=<id> - Replace worker and verify retained evidence"
+	@echo "  make owner-pilot-status SESSION_ID=<id> - Report the next safe owner-workflow step"
 	@echo "  make owner-session SCENARIO=<file> - Create a configured owner-pilot room and token"
 	@echo "  make verify-scorecard SESSION_ID=<id> - Verify retained owner-session evidence"
 	@echo "  make record-owner-acceptance SESSION_ID=<id> DECISION=<accepted|rejected> AUDIO_QUALITY=<acceptable|unacceptable>"
@@ -49,24 +52,28 @@ owner-pilot-replace:
 	@test -n "$(SESSION_ID)" || (echo "SESSION_ID is required" >&2; exit 2)
 	python apps/livekit_agent/replace_owner_pilot.py "$(SESSION_ID)"
 
+owner-pilot-status:
+	@test -n "$(SESSION_ID)" || (echo "SESSION_ID is required" >&2; exit 2)
+	$(OWNER_PILOT_COMPOSE) exec -T worker python -m apps.livekit_agent.owner_pilot_status "$(SESSION_ID)"
+
 owner-session:
 	@test -n "$(SCENARIO)" || (echo "SCENARIO is required" >&2; exit 2)
 	python apps/livekit_agent/create_owner_session.py --scenario-file "$(SCENARIO)"
 
 verify-scorecard:
 	@test -n "$(SESSION_ID)" || (echo "SESSION_ID is required" >&2; exit 2)
-	python apps/livekit_agent/verify_scorecard.py "$(SESSION_ID)"
+	$(OWNER_PILOT_COMPOSE) exec -T worker python -m apps.livekit_agent.verify_scorecard "$(SESSION_ID)"
 
 record-owner-acceptance:
 	@test -n "$(SESSION_ID)" || (echo "SESSION_ID is required" >&2; exit 2)
 	@test -n "$(DECISION)" || (echo "DECISION is required" >&2; exit 2)
 	@test -n "$(AUDIO_QUALITY)" || (echo "AUDIO_QUALITY is required" >&2; exit 2)
-	python apps/livekit_agent/record_owner_acceptance.py "$(SESSION_ID)" \
+	$(OWNER_PILOT_COMPOSE) exec -T worker python -m apps.livekit_agent.record_owner_acceptance "$(SESSION_ID)" \
 		--decision "$(DECISION)" --audio-quality "$(AUDIO_QUALITY)"
 
 verify-owner-acceptance:
 	@test -n "$(SESSION_ID)" || (echo "SESSION_ID is required" >&2; exit 2)
-	python apps/livekit_agent/verify_owner_acceptance.py "$(SESSION_ID)"
+	$(OWNER_PILOT_COMPOSE) exec -T worker python -m apps.livekit_agent.verify_owner_acceptance "$(SESSION_ID)"
 
 # Run Opik tracing smoke test
 opik-smoke-test:
