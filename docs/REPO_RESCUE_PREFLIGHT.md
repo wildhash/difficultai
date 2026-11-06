@@ -891,3 +891,42 @@ pilot still requires the intended Docker host and four voice credentials.
 
 Rollback: revert this repair to remove the read-only visibility gate. It does
 not modify Pages settings, artifacts, deployments, credentials, or evidence.
+
+### 2026-11-06: make an interrupted owner workflow resumable
+
+Baseline: `27ad6e8323082ef39ab16e2c71d49edc924d6e32` (merged PR #32).
+Its Python/image, serialized Vite, and legacy Pages workflows passed. DifficultAI,
+RepoMan, and make_my_day have no open PR or issue. The static pilot is deployed
+and verified, while the credentialed voice worker and real owner session remain
+unrun in this environment.
+
+Diagnosis: the operator path has strong gates for each individual stage, but no
+single read-only command identifies where a specific interrupted session should
+resume. An operator could repeat an immutable evidence write, skip replacement,
+or mistake a missing future artifact for invalid retained evidence.
+
+Alternatives: rely on the written runbook, combine all mutating steps into one
+command, or add a read-only state inspector. The inspector is the smallest safe
+change: human judgment remains separate, existing commands remain authoritative,
+and no provider or deployment action occurs.
+
+Decision: add `make owner-pilot-status SESSION_ID=<id>`. It validates the session
+ID before path access, distinguishes absent future stages from invalid or
+inaccessible existing evidence, reuses the scorecard, replacement, and acceptance verifiers, and emits
+the exact next command or decision step. Output excludes transcripts, scenarios,
+fingerprints, credential values, and private paths.
+
+Verification: regressions cover invalid IDs, missing sessions, scorecard-ready,
+replacement-ready, fully verified, corrupt or inaccessible evidence, and sanitized CLI output.
+The full Python suite, offline preflight, and exact-head CI must pass before merge.
+
+Limitations: the status command is a local evidence navigator, not a deployment,
+provider test, live-audio result, independent audit, customer acceptance, payment,
+or revenue claim.
+
+Next executable step: after merge, deploy exact clean main on the intended Docker
+host with the four voice credentials. After the first real session, run the new
+status command after each stage until the retained acceptance chain verifies.
+
+Rollback: revert this command and documentation. It is read-only and creates,
+changes, starts, stops, or removes no credential, worker, volume, or evidence.

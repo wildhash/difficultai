@@ -61,6 +61,12 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn("down --volumes --remove-orphans", contents)
         self.assertIn("scripts/verify-worker-image.sh", workflow.read_text(encoding="utf-8"))
 
+    def test_owner_pilot_status_is_exposed_as_an_operator_command(self):
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertIn("owner-pilot-status:", makefile)
+        self.assertIn("apps/livekit_agent/owner_pilot_status.py", makefile)
+        self.assertIn('SESSION_ID is required', makefile)
+
     def test_vite_waits_for_legacy_pages_publication(self):
         workflow = ROOT / ".github" / "workflows" / "deploy-pages.yml"
         raw = workflow.read_text(encoding="utf-8")
