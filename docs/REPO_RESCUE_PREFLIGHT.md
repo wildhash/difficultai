@@ -935,3 +935,44 @@ status command after each stage until the retained acceptance chain verifies.
 
 Rollback: revert this command and documentation. It is read-only and creates,
 changes, starts, stops, or removes no credential, worker, volume, or evidence.
+
+### 2026-11-07: bound every owner-pilot deployment stage
+
+Baseline: `9614c284c14fbfe07a656140c96231400bdccabe` (merged PR #33).
+DifficultAI, RepoMan, and make_my_day have no open PR or issue. The static pilot
+remains the only verified deployment; this environment still lacks the intended
+Docker host and four voice credentials.
+
+Diagnosis: readiness and replacement subprocesses have explicit deadlines, but
+`owner-pilot-deploy` could wait forever during Compose validation, image build,
+credentialed preflight, startup, status, revision verification, or cleanup. A
+stalled provider or Docker daemon therefore left the operator without a bounded
+failure or a reliable next action.
+
+Alternatives: rely on external shell timeouts, apply one deadline to the whole
+deployment, or bound each stage. Per-stage limits preserve a realistic image
+build window while failing faster for validation and runtime checks, and they
+identify the stalled stage without exposing command output or credentials.
+
+Decision: give every deployment and cleanup subprocess a stage-specific timeout.
+Convert timeout and process-start failures into sanitized `DeploymentError`
+messages. A timeout before startup never starts the worker; a timeout during or
+after startup still attempts a separately bounded worker stop and never removes
+the persistent scorecard volume.
+
+Verification: regressions must prove credentialed-preflight timeout prevents
+startup, startup timeout invokes bounded cleanup, all successful subprocesses
+receive a positive deadline, and existing ordering and volume-preservation tests
+continue to pass. The full Python suite, offline preflight, exact-head CI, and
+review must pass before merge.
+
+Limitations: timeouts do not validate credentials, deploy from this environment,
+exercise live audio, create a real scorecard, establish owner acceptance, or
+prove customer activity, payment, or revenue.
+
+Next executable step: after merge, run `make owner-pilot-ready` and
+`make owner-pilot-deploy` from a clean checkout on the intended Docker host with
+the four configured credentials, then complete one real owner workflow.
+
+Rollback: revert this change to restore unbounded subprocess waits. No credential,
+worker, volume, deployment, or private evidence is created by this repair.
