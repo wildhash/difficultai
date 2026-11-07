@@ -11,6 +11,15 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = ("docker", "compose", "--file", "compose.owner-pilot.yml")
 REVISION = re.compile(r"[0-9a-f]{40}")
+STAGE_TIMEOUTS = {
+    "Compose validation": 30,
+    "Worker image build": 20 * 60,
+    "Credentialed connectivity preflight": 3 * 60,
+    "Worker start": 2 * 60,
+    "Worker status": 30,
+    "Worker revision": 30,
+    "Worker stop": 60,
+}
 
 
 class DeploymentError(RuntimeError):
@@ -18,10 +27,20 @@ class DeploymentError(RuntimeError):
 
 
 def _run(stage, arguments, *, root, runner, environment, capture_output=False):
-    result = runner(
-        [*COMPOSE, *arguments], cwd=root, check=False,
-        capture_output=capture_output, text=capture_output, env=environment,
-    )
+    try:
+        result = runner(
+            [*COMPOSE, *arguments], cwd=root, check=False,
+            capture_output=capture_output, text=capture_output, env=environment,
+            timeout=STAGE_TIMEOUTS[stage],
+        )
+    except subprocess.TimeoutExpired as error:
+        raise DeploymentError(
+            f"{stage} timed out; inspect local Docker and provider state before retrying"
+        ) from error
+    except OSError as error:
+        raise DeploymentError(
+            f"{stage} could not run; inspect local Docker state before retrying"
+        ) from error
     if result.returncode != 0:
         raise DeploymentError(f"{stage} failed; inspect the command output and correct it before retrying")
     return result
@@ -103,9 +122,11 @@ def deploy(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.run):
 
     # Stop only the service after an uncertain start; never remove its volume.
     try:
-        runner([*COMPOSE, "stop", "worker"], cwd=root, check=False, env=environment)
-    finally:
-        raise DeploymentError(failure)
+        _run("Worker stop", ("stop", "worker"), root=root, runner=runner,
+             environment=environment)
+    except DeploymentError:
+        failure += "; automatic worker stop also failed, so inspect the service before retrying"
+    raise DeploymentError(failure)
 
 
 def main(argv=None):

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from types import SimpleNamespace
+import subprocess
 import tempfile
 import unittest
 
@@ -12,13 +13,16 @@ REVISION = "1" * 40
 
 
 class RecordingRunner:
-    def __init__(self, *, fail_marker=None, status="worker\n"):
+    def __init__(self, *, fail_marker=None, timeout_marker=None, status="worker\n"):
         self.calls = []
         self.fail_marker = fail_marker
+        self.timeout_marker = timeout_marker
         self.status = status
 
     def __call__(self, command, **kwargs):
         self.calls.append((tuple(command), kwargs))
+        if self.timeout_marker and any(self.timeout_marker in part for part in command):
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
         failed = self.fail_marker and any(self.fail_marker in part for part in command)
         stdout = self.status if command[-4:] == ["ps", "--status", "running", "--services"] else ""
         return SimpleNamespace(returncode=1 if failed else 0, stdout=stdout)
@@ -64,6 +68,15 @@ class OwnerPilotDeployTests(unittest.TestCase):
         arguments = [call[0][len(COMPOSE):] for call in runner.calls]
         self.assertNotIn(("up", "-d", "--no-build", "worker"), arguments)
 
+    def test_connectivity_timeout_is_sanitized_and_never_starts_worker(self):
+        self.configure()
+        runner = RecordingRunner(timeout_marker="apps.livekit_agent.smoke_test")
+        with self.assertRaisesRegex(DeploymentError, "connectivity preflight timed out") as caught:
+            deploy(root=self.root, runner=runner, git_runner=RecordingGit())
+        self.assertNotIn(str(self.root), str(caught.exception))
+        arguments = [call[0][len(COMPOSE):] for call in runner.calls]
+        self.assertNotIn(("up", "-d", "--no-build", "worker"), arguments)
+
     def test_success_orders_gate_before_start_and_checks_status(self):
         self.configure()
         runner = RecordingRunner()
@@ -81,6 +94,7 @@ class OwnerPilotDeployTests(unittest.TestCase):
              REVISION),
         ])
         self.assertTrue(all(call[1]["env"]["DIFFICULTAI_BUILD_SHA"] == REVISION for call in runner.calls))
+        self.assertTrue(all(call[1]["timeout"] > 0 for call in runner.calls))
 
     def test_dirty_checkout_stops_before_docker(self):
         self.configure()
@@ -120,6 +134,16 @@ class OwnerPilotDeployTests(unittest.TestCase):
             deploy(root=self.root, runner=runner, git_runner=RecordingGit())
         commands = [call[0] for call in runner.calls]
         self.assertEqual(commands[-1], (*COMPOSE, "stop", "worker"))
+        self.assertTrue(all("down" not in command and "--volumes" not in command for command in commands))
+
+    def test_start_timeout_runs_bounded_stop_without_volume_removal(self):
+        self.configure()
+        runner = RecordingRunner(timeout_marker="up")
+        with self.assertRaisesRegex(DeploymentError, "scorecard storage was preserved"):
+            deploy(root=self.root, runner=runner, git_runner=RecordingGit())
+        commands = [call[0] for call in runner.calls]
+        self.assertEqual(commands[-1], (*COMPOSE, "stop", "worker"))
+        self.assertEqual(runner.calls[-1][1]["timeout"], 60)
         self.assertTrue(all("down" not in command and "--volumes" not in command for command in commands))
 
 
