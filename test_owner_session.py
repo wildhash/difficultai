@@ -151,6 +151,60 @@ class TestOwnerSession(unittest.IsolatedAsyncioTestCase):
 
 
 class TestOwnerSessionCLI(unittest.TestCase):
+    def test_project_env_is_loaded_without_exporting_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "scenario.json"
+            path.write_text(json.dumps(SCENARIO), encoding="utf-8")
+            (root / ".env").write_text(
+                "LIVEKIT_URL=wss://file.livekit.cloud\n"
+                "LIVEKIT_API_KEY=file-key\n"
+                "LIVEKIT_API_SECRET=file-secret\n",
+                encoding="utf-8",
+            )
+            created = {
+                "schema_version": 1,
+                "livekit_url": "wss://file.livekit.cloud",
+                "room_name": "owner-room",
+                "participant_identity": "owner-user",
+                "access_token": "short-lived-token",
+                "expires_in_minutes": 30,
+                "next_action": "start",
+                "sensitive": "do not share",
+            }
+            with patch.object(
+                owner_session, "create_session", new=AsyncMock(return_value=created)
+            ) as create:
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    code = owner_session.main(
+                        ["--scenario-file", str(path)], root=root, environ={}
+                    )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(output.getvalue())["status"], "created")
+        configured = create.await_args.kwargs["environ"]
+        self.assertEqual(configured["LIVEKIT_URL"], "wss://file.livekit.cloud")
+        self.assertEqual(configured["LIVEKIT_API_KEY"], "file-key")
+        self.assertEqual(configured["LIVEKIT_API_SECRET"], "file-secret")
+
+    def test_exported_configuration_overrides_project_env(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".env").write_text(
+                "LIVEKIT_URL=wss://file.livekit.cloud\nLIVEKIT_API_KEY=file-key\n",
+                encoding="utf-8",
+            )
+            configured = owner_session.load_configuration(
+                root,
+                {
+                    "LIVEKIT_URL": "wss://exported.livekit.cloud",
+                    "LIVEKIT_API_KEY": "exported-key",
+                },
+            )
+        self.assertEqual(configured["LIVEKIT_URL"], "wss://exported.livekit.cloud")
+        self.assertEqual(configured["LIVEKIT_API_KEY"], "exported-key")
+
     def test_provider_failure_does_not_print_credentials_or_provider_detail(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "scenario.json"

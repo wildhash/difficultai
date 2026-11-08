@@ -11,6 +11,8 @@ import sys
 from urllib.parse import urlsplit
 import uuid
 
+from dotenv import dotenv_values
+
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_DIR = Path(__file__).resolve().parent
 for location in (str(ROOT), str(MODULE_DIR)):
@@ -21,6 +23,19 @@ from scenario_validator import validate_scenario
 
 NAME = re.compile(r"[A-Za-z0-9_-]{1,128}")
 LIVEKIT_VARS = ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
+
+
+def load_configuration(root: Path, environ: dict) -> dict:
+    """Load the documented project .env without mutating the process environment."""
+    configured = {}
+    path = root / ".env"
+    if path.is_file():
+        try:
+            configured = {key: value or "" for key, value in dotenv_values(path).items()}
+        except (OSError, UnicodeError, ValueError) as error:
+            raise ValueError("Project .env could not be read") from error
+    # Match Docker Compose and the readiness gate: exported values win.
+    return {**configured, **dict(environ)}
 
 
 def load_scenario(path: Path) -> dict:
@@ -97,7 +112,7 @@ async def create_session(*, scenario: dict, room_name: str, identity: str,
     }
 
 
-def main(argv=None):
+def main(argv=None, *, root=ROOT, environ=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario-file", type=Path, required=True,
                         help="JSON copied from the DifficultAI scenario builder")
@@ -108,12 +123,15 @@ def main(argv=None):
 
     try:
         scenario = load_scenario(args.scenario_file)
+        configured = load_configuration(
+            Path(root), os.environ if environ is None else environ
+        )
         result = asyncio.run(create_session(
             scenario=scenario,
             room_name=args.room,
             identity=args.identity,
             ttl_minutes=args.ttl_minutes,
-            environ=os.environ,
+            environ=configured,
         ))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         print(json.dumps({
