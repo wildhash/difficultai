@@ -976,3 +976,44 @@ the four configured credentials, then complete one real owner workflow.
 
 Rollback: revert this change to restore unbounded subprocess waits. No credential,
 worker, volume, deployment, or private evidence is created by this repair.
+
+### 2026-11-08: make owner-session use the documented credentials
+
+Baseline: `ab118615008873b6f427eed67c6df6b4690455e9` (merged PR #34).
+Its Python/image and both Pages workflows passed. DifficultAI, RepoMan, and
+make_my_day have no open PR or issue. The static pilot remains deployed, while
+the credentialed voice worker and real owner workflow remain unrun here.
+
+Diagnosis: readiness and Compose deployment read credentials from the project
+`.env`, but `make owner-session` passed only the shell process environment to its
+LiveKit client. Following the documented setup exactly could therefore deploy a
+configured worker and then fail the first owner-room command unless the operator
+also exported the same secrets manually.
+
+Alternatives: require an undocumented shell export, run session creation inside
+the worker and copy the host scenario into it, or load project configuration in
+the existing host command. Loading `.env` is the smallest change and matches the
+precedence already used by readiness and Docker Compose.
+
+Decision: load project `.env` for owner-session without mutating `os.environ`.
+Explicit process values continue to override file values. Missing or invalid
+configuration still fails before provider I/O, and credential values remain out
+of errors and checked-in evidence.
+
+Verification: regressions prove `.env` works without exported credentials and
+that explicit process values win. Existing token scope, scenario validation,
+provider-error sanitization, the full Python suite, offline preflight, exact-head
+CI, and review must pass before merge.
+
+Limitations: this aligns configuration only. It does not validate credential
+values here, deploy the worker, contact LiveKit in tests, exercise live audio,
+create retained real evidence, establish owner acceptance, or prove customer
+activity, payment, or revenue.
+
+Next executable step: after merge, use a clean checkout on the intended Docker
+host, configure `.env`, run readiness and deployment, then run
+`make owner-session SCENARIO=<private-json-path>` without separately exporting
+the credentials.
+
+Rollback: revert this loader and documentation. It creates no credential,
+session, worker, volume, deployment, or evidence by itself.
