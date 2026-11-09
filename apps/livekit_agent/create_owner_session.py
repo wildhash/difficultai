@@ -23,6 +23,7 @@ from scenario_validator import validate_scenario
 
 NAME = re.compile(r"[A-Za-z0-9_-]{1,128}")
 LIVEKIT_VARS = ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
+SESSION_BOOTSTRAP_TIMEOUT_SECONDS = 30
 
 
 def load_configuration(root: Path, environ: dict) -> dict:
@@ -89,17 +90,27 @@ async def create_session(*, scenario: dict, room_name: str, identity: str,
         ))
         .to_jwt()
     )
-    async with api.LiveKitAPI(
-        url=environ["LIVEKIT_URL"],
-        api_key=environ["LIVEKIT_API_KEY"],
-        api_secret=environ["LIVEKIT_API_SECRET"],
-    ) as client:
-        room = await client.room.create_room(api.CreateRoomRequest(
-            name=room_name,
-            metadata=metadata,
-        ))
-        if room.name != room_name or room.metadata != metadata:
-            raise ValueError("Room already exists with different metadata; choose another --room")
+    async def create_room():
+        async with api.LiveKitAPI(
+            url=environ["LIVEKIT_URL"],
+            api_key=environ["LIVEKIT_API_KEY"],
+            api_secret=environ["LIVEKIT_API_SECRET"],
+        ) as client:
+            return await client.room.create_room(api.CreateRoomRequest(
+                name=room_name,
+                metadata=metadata,
+            ))
+
+    try:
+        room = await asyncio.wait_for(
+            create_room(), timeout=SESSION_BOOTSTRAP_TIMEOUT_SECONDS
+        )
+    except TimeoutError as error:
+        raise ValueError(
+            "Session bootstrap timed out; verify LiveKit connectivity before retrying"
+        ) from error
+    if room.name != room_name or room.metadata != metadata:
+        raise ValueError("Room already exists with different metadata; choose another --room")
     return {
         "schema_version": 1,
         "livekit_url": environ["LIVEKIT_URL"],
