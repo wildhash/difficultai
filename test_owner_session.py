@@ -127,6 +127,33 @@ class TestOwnerSession(unittest.IsolatedAsyncioTestCase):
                 )
         manager.__aexit__.assert_awaited_once()
 
+    async def test_room_creation_timeout_cancels_provider_context(self):
+        async def never_returns(_request):
+            await asyncio.Event().wait()
+
+        room_service = SimpleNamespace(
+            create_room=AsyncMock(side_effect=never_returns)
+        )
+        manager = Mock(
+            __aenter__=AsyncMock(
+                return_value=SimpleNamespace(room=room_service)
+            ),
+            __aexit__=AsyncMock(return_value=False),
+        )
+        with patch.object(api, "LiveKitAPI", return_value=manager):
+            with patch.object(owner_session, "SESSION_BOOTSTRAP_TIMEOUT_SECONDS", 0.01):
+                with self.assertRaisesRegex(ValueError, "Session bootstrap timed out"):
+                    await owner_session.create_session(
+                        scenario=SCENARIO,
+                        room_name="owner-room",
+                        identity="owner-user",
+                        ttl_minutes=30,
+                        environ=ENVIRONMENT,
+                    )
+
+        manager.__aexit__.assert_awaited_once()
+        room_service.create_room.assert_awaited_once()
+
     async def test_rejects_unsafe_names_and_long_tokens(self):
         for room, identity, ttl in (("../room", "owner", 30), ("room", "owner/name", 30), ("room", "owner", 121)):
             with self.subTest(room=room, identity=identity, ttl=ttl):

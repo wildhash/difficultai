@@ -1017,3 +1017,43 @@ the credentials.
 
 Rollback: revert this loader and documentation. It creates no credential,
 session, worker, volume, deployment, or evidence by itself.
+
+### 2026-11-09: bound the first credentialed room request
+
+Baseline: `4231c1552ffa48611dca30d366851784874b8104` (merged PR #35).
+Its Python/image and both Pages workflows passed. DifficultAI, RepoMan, and
+make_my_day have no open PR or issue. The static pilot remains deployed, while
+the credentialed voice worker and real owner workflow remain unrun here.
+
+Diagnosis: deployment subprocesses have explicit deadlines, but the host-side
+`owner-session` command could wait forever while opening its LiveKit client or
+creating the first room. A stalled provider connection therefore left the
+operator without a bounded failure or reliable retry decision.
+
+Alternatives: rely on an external shell timeout, expose a new operator-tunable
+deadline, or enforce one conservative application deadline around the existing
+provider context. The fixed application deadline is the smallest safe repair:
+it covers connection, request, and cleanup without expanding configuration.
+
+Decision: allow 30 seconds for the LiveKit client context and room request.
+On timeout, cancel the provider task, close its context, and return a sanitized
+actionable error without provider details or credentials. Token and scenario
+validation behavior remains unchanged.
+
+Verification: a regression must prove a non-returning room request is cancelled,
+the provider context exits, and the caller receives the sanitized timeout. The
+full Python suite, offline preflight, exact-head CI, and review must pass before
+merge.
+
+Limitations: this bounds one provider operation only. It does not validate real
+credentials here, deploy the worker, exercise live audio, create retained real
+evidence, establish owner acceptance, or prove customer activity, payment, or
+revenue.
+
+Next executable step: after merge, use a clean checkout on the intended Docker
+host with the four configured credentials, run readiness and deployment, then
+create one real owner session and follow the retained-evidence status workflow.
+
+Rollback: revert this timeout and regression to restore the unbounded provider
+wait. This repair itself creates no credential, session, worker, volume,
+deployment, or evidence.
