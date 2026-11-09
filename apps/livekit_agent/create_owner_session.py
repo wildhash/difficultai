@@ -105,7 +105,7 @@ async def create_session(*, scenario: dict, room_name: str, identity: str,
         room = await asyncio.wait_for(
             create_room(), timeout=SESSION_BOOTSTRAP_TIMEOUT_SECONDS
         )
-    except TimeoutError as error:
+    except asyncio.TimeoutError as error:
         raise ValueError(
             "Session bootstrap timed out; verify LiveKit connectivity before retrying"
         ) from error
