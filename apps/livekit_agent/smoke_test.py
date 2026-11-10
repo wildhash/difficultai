@@ -21,7 +21,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 REQUIRED_VARS = ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "OPENAI_API_KEY")
 UNVERIFIED = [
-    "OpenAI provider access",
     "Two-way live audio, interruption handling, and transcript delivery",
     "Real-session scorecard and retention across worker replacement",
     "Web deployment and owner acceptance",
@@ -103,6 +102,18 @@ async def check_livekit(environ, timeout=10):
         await asyncio.wait_for(client.room.list_rooms(api.ListRoomsRequest()), timeout=timeout)
 
 
+async def check_openai(environ, timeout=10):
+    """Open and close the worker's Realtime transport without sending content."""
+    from openai import AsyncOpenAI
+
+    async with AsyncOpenAI(api_key=environ["OPENAI_API_KEY"]) as client:
+        async def connect():
+            async with client.realtime.connect(model="gpt-realtime"):
+                return
+
+        await asyncio.wait_for(connect(), timeout=timeout)
+
+
 async def run_checks(*, offline=False):
     checks = []
 
@@ -126,6 +137,7 @@ async def run_checks(*, offline=False):
     if offline:
         record("configuration", "not_run", "Offline mode does not check credentials.")
         record("livekit_connectivity", "not_run", "Offline mode makes no service requests.")
+        record("openai_connectivity", "not_run", "Offline mode makes no service requests.")
     else:
         try:
             issues = environment_issues(os.environ)
@@ -138,14 +150,21 @@ async def run_checks(*, offline=False):
             record("configuration", "failed", "Missing or invalid: " + ", ".join(issues),
                    action + ". Rerun.")
             record("livekit_connectivity", "not_run", "Configuration must pass first.")
+            record("openai_connectivity", "not_run", "Configuration must pass first.")
         else:
-            record("configuration", "passed", "Required values present; OpenAI access is not tested.")
+            record("configuration", "passed", "Required values present; provider access is tested separately.")
             try:
                 await check_livekit(os.environ)
                 record("livekit_connectivity", "passed", "Authenticated LiveKit room listing succeeded.")
             except Exception as error:
                 record("livekit_connectivity", "failed", f"Request raised {type(error).__name__}.",
                        "Check LiveKit credentials, network access, and server availability; rerun.")
+            try:
+                await check_openai(os.environ)
+                record("openai_connectivity", "passed", "Authenticated OpenAI Realtime handshake succeeded without sending content.")
+            except Exception as error:
+                record("openai_connectivity", "failed", f"Request raised {type(error).__name__}.",
+                       "Check the OpenAI credential, network access, and account availability; rerun.")
 
     failed = [check for check in checks if check["status"] == "failed"]
     return {

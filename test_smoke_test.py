@@ -62,10 +62,12 @@ class TestPreflight(unittest.IsolatedAsyncioTestCase):
         )))
         manager = Mock(__aenter__=AsyncMock(return_value=client), __aexit__=AsyncMock(return_value=False))
         with patch.object(api, "LiveKitAPI", return_value=manager):
-            report = await smoke_test.run_checks()
+            with patch.object(smoke_test, "check_openai", new_callable=AsyncMock):
+                report = await smoke_test.run_checks()
         manager.__aexit__.assert_awaited_once()
         self.assertEqual(report["status"], "failed")
-        self.assertEqual(report["checks"][-1]["name"], "livekit_connectivity")
+        livekit = next(c for c in report["checks"] if c["name"] == "livekit_connectivity")
+        self.assertEqual(livekit["status"], "failed")
         self.assertNotIn("fixture-secret", json.dumps(report))
         self.assertNotIn("fixture-openai-key", json.dumps(report))
         self.assertIn("LiveKit credentials", report["next_action"])
@@ -95,9 +97,11 @@ class TestPreflight(unittest.IsolatedAsyncioTestCase):
             "LIVEKIT_API_SECRET": "your_livekit_api_secret",
             "OPENAI_API_KEY": "your_api_key_here",
         }):
-            with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock) as connect:
-                report = await smoke_test.run_checks()
-                connect.assert_not_awaited()
+            with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock) as livekit:
+                with patch.object(smoke_test, "check_openai", new_callable=AsyncMock) as openai:
+                    report = await smoke_test.run_checks()
+                    livekit.assert_not_awaited()
+                    openai.assert_not_awaited()
         self.assertEqual(report["status"], "failed")
         config = next(c for c in report["checks"] if c["name"] == "configuration")
         for variable in smoke_test.REQUIRED_VARS:
@@ -105,9 +109,11 @@ class TestPreflight(unittest.IsolatedAsyncioTestCase):
 
     async def test_offline_checks_need_no_credentials_and_preserve_acceptance_boundary(self):
         with patch.dict(os.environ, {"SCORECARD_DIR": self.directory.name}, clear=True):
-            with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock) as connect:
-                report = await smoke_test.run_checks(offline=True)
-                connect.assert_not_awaited()
+            with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock) as livekit:
+                with patch.object(smoke_test, "check_openai", new_callable=AsyncMock) as openai:
+                    report = await smoke_test.run_checks(offline=True)
+                    livekit.assert_not_awaited()
+                    openai.assert_not_awaited()
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["mode"], "offline")
         self.assertEqual(report["checks"][-1]["status"], "not_run")
@@ -115,21 +121,83 @@ class TestPreflight(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(list(Path(self.directory.name).iterdir()))
 
     async def test_connectivity_success_does_not_claim_voice_acceptance(self):
-        with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock) as connect:
-            report = await smoke_test.run_checks()
-            connect.assert_awaited_once()
+        with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock) as livekit:
+            with patch.object(smoke_test, "check_openai", new_callable=AsyncMock) as openai:
+                report = await smoke_test.run_checks()
+                livekit.assert_awaited_once()
+                openai.assert_awaited_once()
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["mode"], "connectivity")
-        self.assertIn("OpenAI provider access", report["not_verified"])
+        openai = next(c for c in report["checks"] if c["name"] == "openai_connectivity")
+        self.assertEqual(openai["status"], "passed")
         self.assertIn("owner voice session", report["next_action"])
+
+    async def test_openai_failure_is_sanitized_and_blocks_deployment(self):
+        with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock):
+            with patch.object(
+                smoke_test, "check_openai",
+                new=AsyncMock(side_effect=RuntimeError("fixture-openai-key private-detail")),
+            ):
+                report = await smoke_test.run_checks()
+        self.assertEqual(report["status"], "failed")
+        check = next(c for c in report["checks"] if c["name"] == "openai_connectivity")
+        self.assertEqual(check["status"], "failed")
+        self.assertIn("OpenAI credential", report["next_action"])
+        self.assertNotIn("fixture-openai-key", json.dumps(report))
+        self.assertNotIn("private-detail", json.dumps(report))
+
+    async def test_openai_timeout_cancels_request_and_closes_client(self):
+        cancelled = asyncio.Event()
+
+        async def hang():
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        connection = Mock(
+            __aenter__=AsyncMock(side_effect=hang),
+            __aexit__=AsyncMock(return_value=False),
+        )
+        realtime = Mock()
+        realtime.connect.return_value = connection
+        client = SimpleNamespace(realtime=realtime)
+        client_manager = Mock(
+            __aenter__=AsyncMock(return_value=client),
+            __aexit__=AsyncMock(return_value=False),
+        )
+        with patch("openai.AsyncOpenAI", return_value=client_manager):
+            with self.assertRaises(asyncio.TimeoutError):
+                await smoke_test.check_openai(os.environ, timeout=0.01)
+        self.assertTrue(cancelled.is_set())
+        client_manager.__aexit__.assert_awaited_once()
+
+    async def test_openai_uses_worker_realtime_model_and_closes_contexts(self):
+        connection = Mock(
+            __aenter__=AsyncMock(return_value=SimpleNamespace()),
+            __aexit__=AsyncMock(return_value=False),
+        )
+        realtime = Mock()
+        realtime.connect.return_value = connection
+        client_manager = Mock(
+            __aenter__=AsyncMock(return_value=SimpleNamespace(realtime=realtime)),
+            __aexit__=AsyncMock(return_value=False),
+        )
+        with patch("openai.AsyncOpenAI", return_value=client_manager):
+            await smoke_test.check_openai(os.environ)
+        realtime.connect.assert_called_once_with(model="gpt-realtime")
+        connection.__aexit__.assert_awaited_once()
+        client_manager.__aexit__.assert_awaited_once()
 
     async def test_invalid_voice_mode_fails_before_service_io(self):
         for mode in ("unsupported", "", "   ", "private-value"):
             with self.subTest(mode=mode), patch.dict(os.environ, {"VOICE_MODE": mode}):
-                with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock) as connect:
-                    report = await smoke_test.run_checks()
+                with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock) as livekit:
+                    with patch.object(smoke_test, "check_openai", new_callable=AsyncMock) as openai:
+                        report = await smoke_test.run_checks()
                 self.assertEqual(report["status"], "failed")
-                connect.assert_not_awaited()
+                livekit.assert_not_awaited()
+                openai.assert_not_awaited()
                 config = next(c for c in report["checks"] if c["name"] == "configuration")
                 self.assertIn("VOICE_MODE", config["detail"])
                 self.assertNotIn("private-value", json.dumps(report))
@@ -143,7 +211,8 @@ class TestPreflight(unittest.IsolatedAsyncioTestCase):
     async def test_storage_failure_is_not_hidden_by_connectivity_success(self):
         with patch.object(smoke_test, "check_storage", side_effect=PermissionError("private-path")):
             with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock):
-                report = await smoke_test.run_checks()
+                with patch.object(smoke_test, "check_openai", new_callable=AsyncMock):
+                    report = await smoke_test.run_checks()
         self.assertEqual(report["status"], "failed")
         self.assertIn("SCORECARD_DIR", report["next_action"])
         self.assertNotIn("private-path", json.dumps(report))

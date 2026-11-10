@@ -1057,3 +1057,41 @@ create one real owner session and follow the retained-evidence status workflow.
 Rollback: revert this timeout and regression to restore the unbounded provider
 wait. This repair itself creates no credential, session, worker, volume,
 deployment, or evidence.
+
+### 2026-11-10: require both providers before worker startup
+
+Baseline: `3af053b9d453b1074590c4a618cdfb6189533279` (merged PR #36).
+Its Python/image and both Pages workflows passed. DifficultAI, RepoMan, and
+make_my_day have no open PR or issue. The static pilot remains deployed, while
+the credentialed voice worker and real owner workflow remain unrun here.
+
+Diagnosis: the deployment gate required an OpenAI key but authenticated only to
+LiveKit before starting the worker. An expired, revoked, or unreachable OpenAI
+account could therefore pass readiness and fail only after an owner joined.
+
+Alternatives: leave OpenAI validation to the first live session, generate a test
+response during deployment, list models, or open the worker's transport without
+sending content. A bounded Realtime handshake is the closest safe check: it
+matches the worker's model and permission scope without generating content.
+
+Decision: credentialed preflight now performs independent, ten-second-bounded
+LiveKit room listing and OpenAI `gpt-realtime` WebSocket handshake checks. Either failure blocks
+worker startup, reports only the exception type and an actionable provider-specific
+next step, and retains the existing private preflight report.
+
+Verification: regressions must prove OpenAI success is required, failure details
+are sanitized, a hung request is cancelled, and the client context closes. The
+full Python suite, offline preflight, exact-head CI, and review must pass before
+merge.
+
+Limitations: the Realtime handshake proves authentication and transport access,
+not model generation, live audio, interruption handling, retained real evidence,
+owner acceptance, customer activity, payment, or revenue.
+
+Next executable step: after merge, deploy clean main on the intended Docker host
+with the four configured credentials. The gate must pass both providers before
+startup; then complete one real owner session and retained-evidence workflow.
+
+Rollback: revert this provider check and regressions to restore LiveKit-only
+deployment preflight. This repair itself creates no content, session, worker,
+volume, deployment, or evidence.
