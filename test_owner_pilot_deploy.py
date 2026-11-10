@@ -63,7 +63,7 @@ class OwnerPilotDeployTests(unittest.TestCase):
     def test_connectivity_failure_never_starts_worker(self):
         self.configure()
         runner = RecordingRunner(fail_marker="apps.livekit_agent.smoke_test")
-        with self.assertRaisesRegex(DeploymentError, "connectivity"):
+        with self.assertRaisesRegex(DeploymentError, "provider preflight"):
             deploy(root=self.root, runner=runner, git_runner=RecordingGit())
         arguments = [call[0][len(COMPOSE):] for call in runner.calls]
         self.assertNotIn(("up", "-d", "--no-build", "worker"), arguments)
@@ -71,7 +71,7 @@ class OwnerPilotDeployTests(unittest.TestCase):
     def test_connectivity_timeout_is_sanitized_and_never_starts_worker(self):
         self.configure()
         runner = RecordingRunner(timeout_marker="apps.livekit_agent.smoke_test")
-        with self.assertRaisesRegex(DeploymentError, "connectivity preflight timed out") as caught:
+        with self.assertRaisesRegex(DeploymentError, "provider preflight timed out") as caught:
             deploy(root=self.root, runner=runner, git_runner=RecordingGit())
         self.assertNotIn(str(self.root), str(caught.exception))
         arguments = [call[0][len(COMPOSE):] for call in runner.calls]

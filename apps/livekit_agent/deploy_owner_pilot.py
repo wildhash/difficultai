@@ -14,7 +14,7 @@ REVISION = re.compile(r"[0-9a-f]{40}")
 STAGE_TIMEOUTS = {
     "Compose validation": 30,
     "Worker image build": 20 * 60,
-    "Credentialed connectivity preflight": 3 * 60,
+    "Credentialed provider preflight": 3 * 60,
     "Worker start": 2 * 60,
     "Worker status": 30,
     "Worker revision": 30,
@@ -89,7 +89,7 @@ def deploy(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.run):
     _run("Worker image build", ("build", "worker"), root=root, runner=runner,
          environment=environment)
     _run(
-        "Credentialed connectivity preflight",
+        "Credentialed provider preflight",
         ("run", "--rm", "--no-deps", "worker", "python", "-m",
          "apps.livekit_agent.smoke_test"),
         root=root, runner=runner, environment=environment,
@@ -137,8 +137,8 @@ def main(argv=None):
     except DeploymentError as error:
         print(f"Owner-pilot deployment blocked: {error}", file=sys.stderr)
         return 1
-    print("Owner-pilot worker is running after Compose validation, image build, and LiveKit connectivity preflight.")
-    print("Live audio, OpenAI provider access, retained real-session evidence, and owner acceptance remain unverified.")
+    print("Owner-pilot worker is running after Compose validation, image build, and LiveKit/OpenAI connectivity preflight.")
+    print("OpenAI Realtime access, live audio, retained real-session evidence, and owner acceptance remain unverified.")
     return 0
 
 

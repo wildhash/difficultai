@@ -25,10 +25,11 @@ docker compose -f compose.owner-pilot.yml logs -f worker
 ```
 
 `owner-pilot-deploy` fails before starting the service unless the Compose model,
-image build, and credentialed LiveKit connectivity preflight all pass. It then
+image build, and credentialed LiveKit and OpenAI preflight checks all pass. It then
 requires the worker to remain running. If that final check fails, it stops only
-the worker and preserves the named scorecard volume. The connectivity check does
-not verify OpenAI access, live audio, or owner acceptance.
+the worker and preserves the named scorecard volume. The provider checks
+authenticate without generation; they do not verify OpenAI Realtime access,
+live audio, or owner acceptance.
 
 The image runs `python -m apps.livekit_agent start` as an unprivileged user and
 stores evidence at `/data/scorecards`, backed by the
