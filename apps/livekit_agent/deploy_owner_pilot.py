@@ -138,7 +138,7 @@ def main(argv=None):
         print(f"Owner-pilot deployment blocked: {error}", file=sys.stderr)
         return 1
     print("Owner-pilot worker is running after Compose validation, image build, and LiveKit/OpenAI connectivity preflight.")
-    print("OpenAI Realtime access, live audio, retained real-session evidence, and owner acceptance remain unverified.")
+    print("Model generation, live audio, retained real-session evidence, and owner acceptance remain unverified.")
     return 0
 
 

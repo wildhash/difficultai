@@ -21,7 +21,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 REQUIRED_VARS = ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "OPENAI_API_KEY")
 UNVERIFIED = [
-    "OpenAI Realtime voice-session access",
     "Two-way live audio, interruption handling, and transcript delivery",
     "Real-session scorecard and retention across worker replacement",
     "Web deployment and owner acceptance",
@@ -104,11 +103,15 @@ async def check_livekit(environ, timeout=10):
 
 
 async def check_openai(environ, timeout=10):
-    """Authenticate without generating content or incurring model usage."""
+    """Open and close the worker's Realtime transport without sending content."""
     from openai import AsyncOpenAI
 
     async with AsyncOpenAI(api_key=environ["OPENAI_API_KEY"]) as client:
-        await asyncio.wait_for(client.models.list(), timeout=timeout)
+        async def connect():
+            async with client.realtime.connect(model="gpt-realtime"):
+                return
+
+        await asyncio.wait_for(connect(), timeout=timeout)
 
 
 async def run_checks(*, offline=False):
@@ -158,7 +161,7 @@ async def run_checks(*, offline=False):
                        "Check LiveKit credentials, network access, and server availability; rerun.")
             try:
                 await check_openai(os.environ)
-                record("openai_connectivity", "passed", "Authenticated OpenAI model listing succeeded without generation.")
+                record("openai_connectivity", "passed", "Authenticated OpenAI Realtime handshake succeeded without sending content.")
             except Exception as error:
                 record("openai_connectivity", "failed", f"Request raised {type(error).__name__}.",
                        "Check the OpenAI credential, network access, and account availability; rerun.")

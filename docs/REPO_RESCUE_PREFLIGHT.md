@@ -1070,12 +1070,12 @@ LiveKit before starting the worker. An expired, revoked, or unreachable OpenAI
 account could therefore pass readiness and fail only after an owner joined.
 
 Alternatives: leave OpenAI validation to the first live session, generate a test
-response during deployment, or use a bounded read-only API call. Listing models
-is the smallest safe check: it authenticates without generating content or
-incurring model usage, while live Realtime access remains an acceptance gate.
+response during deployment, list models, or open the worker's transport without
+sending content. A bounded Realtime handshake is the closest safe check: it
+matches the worker's model and permission scope without generating content.
 
 Decision: credentialed preflight now performs independent, ten-second-bounded
-LiveKit room listing and OpenAI model listing checks. Either failure blocks
+LiveKit room listing and OpenAI `gpt-realtime` WebSocket handshake checks. Either failure blocks
 worker startup, reports only the exception type and an actionable provider-specific
 next step, and retains the existing private preflight report.
 
@@ -1084,9 +1084,9 @@ are sanitized, a hung request is cancelled, and the client context closes. The
 full Python suite, offline preflight, exact-head CI, and review must pass before
 merge.
 
-Limitations: model listing proves OpenAI authentication and basic API reachability,
-not Realtime entitlement, live audio, interruption handling, retained real
-evidence, owner acceptance, customer activity, payment, or revenue.
+Limitations: the Realtime handshake proves authentication and transport access,
+not model generation, live audio, interruption handling, retained real evidence,
+owner acceptance, customer activity, payment, or revenue.
 
 Next executable step: after merge, deploy clean main on the intended Docker host
 with the four configured credentials. The gate must pass both providers before

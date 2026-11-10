@@ -128,8 +128,8 @@ class TestPreflight(unittest.IsolatedAsyncioTestCase):
                 openai.assert_awaited_once()
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["mode"], "connectivity")
-        self.assertIn("OpenAI Realtime voice-session access", report["not_verified"])
-        self.assertEqual(report["checks"][-1]["status"], "passed")
+        openai = next(c for c in report["checks"] if c["name"] == "openai_connectivity")
+        self.assertEqual(openai["status"], "passed")
         self.assertIn("owner voice session", report["next_action"])
 
     async def test_openai_failure_is_sanitized_and_blocks_deployment(self):
@@ -155,16 +155,39 @@ class TestPreflight(unittest.IsolatedAsyncioTestCase):
             finally:
                 cancelled.set()
 
-        client = SimpleNamespace(models=SimpleNamespace(list=AsyncMock(side_effect=hang)))
-        manager = Mock(
+        connection = Mock(
+            __aenter__=AsyncMock(side_effect=hang),
+            __aexit__=AsyncMock(return_value=False),
+        )
+        realtime = Mock()
+        realtime.connect.return_value = connection
+        client = SimpleNamespace(realtime=realtime)
+        client_manager = Mock(
             __aenter__=AsyncMock(return_value=client),
             __aexit__=AsyncMock(return_value=False),
         )
-        with patch("openai.AsyncOpenAI", return_value=manager):
+        with patch("openai.AsyncOpenAI", return_value=client_manager):
             with self.assertRaises(asyncio.TimeoutError):
                 await smoke_test.check_openai(os.environ, timeout=0.01)
         self.assertTrue(cancelled.is_set())
-        manager.__aexit__.assert_awaited_once()
+        client_manager.__aexit__.assert_awaited_once()
+
+    async def test_openai_uses_worker_realtime_model_and_closes_contexts(self):
+        connection = Mock(
+            __aenter__=AsyncMock(return_value=SimpleNamespace()),
+            __aexit__=AsyncMock(return_value=False),
+        )
+        realtime = Mock()
+        realtime.connect.return_value = connection
+        client_manager = Mock(
+            __aenter__=AsyncMock(return_value=SimpleNamespace(realtime=realtime)),
+            __aexit__=AsyncMock(return_value=False),
+        )
+        with patch("openai.AsyncOpenAI", return_value=client_manager):
+            await smoke_test.check_openai(os.environ)
+        realtime.connect.assert_called_once_with(model="gpt-realtime")
+        connection.__aexit__.assert_awaited_once()
+        client_manager.__aexit__.assert_awaited_once()
 
     async def test_invalid_voice_mode_fails_before_service_io(self):
         for mode in ("unsupported", "", "   ", "private-value"):
