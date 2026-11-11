@@ -54,10 +54,16 @@ function App() {
   // Connect to room
   const connectToRoom = async () => {
     if (roomRef.current) return
-    if (!livekitUrl.trim() || !accessToken.trim() || !roomName.trim()) {
+    const trimmedUrl = livekitUrl.trim()
+    const trimmedToken = accessToken.trim()
+    if (!trimmedUrl || !trimmedToken || !roomName.trim()) {
       alert('Please fill in all connection fields: LiveKit URL, Access Token, and Room Name')
       return
     }
+
+    // Minimize how long the short-lived credential remains in component state;
+    // the SDK receives the captured local value for this connection attempt.
+    setAccessToken('')
     
     const room = new Room()
     roomRef.current = room
@@ -111,7 +117,7 @@ function App() {
       })
       
       // Connect to room
-      await room.connect(livekitUrl.trim(), accessToken.trim())
+      await room.connect(trimmedUrl, trimmedToken)
       if (roomRef.current !== room) {
         await room.disconnect()
         return
@@ -288,6 +294,7 @@ function App() {
               <strong>Note:</strong> To connect directly, you need a LiveKit access token.
               See README for token generation instructions.
               Scenario JSON is only used if it was set as room metadata when the room was created.
+              For security, the token is cleared when a connection attempt starts; paste it again to retry.
             </p>
             
             <div className="form-group">
@@ -312,11 +319,13 @@ function App() {
             
             <div className="form-group">
               <label>Access Token:</label>
-              <textarea
+              <input
+                type="password"
                 value={accessToken}
                 onChange={(e) => setAccessToken(e.target.value)}
                 placeholder="Paste your LiveKit access token here"
-                rows={3}
+                autoComplete="new-password"
+                spellCheck={false}
               />
             </div>
             

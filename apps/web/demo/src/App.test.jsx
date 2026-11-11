@@ -76,6 +76,10 @@ describe('room lifecycle', () => {
     await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Connection failed: Token expired'))
     expect(room.disconnect).toHaveBeenCalled()
     expect(room.localParticipant.setMicrophoneEnabled).not.toHaveBeenCalled()
+    const tokenInput = screen.getByPlaceholderText('Paste your LiveKit access token here')
+    expect(tokenInput.type).toBe('password')
+    expect(tokenInput.autocomplete).toBe('new-password')
+    expect(tokenInput.value).toBe('')
   })
 
   it('preserves transcripts received before microphone setup finishes', async () => {
@@ -159,6 +163,7 @@ describe('room lifecycle', () => {
     await act(async () => pending.resolve())
     expect(room.localParticipant.setMicrophoneEnabled).not.toHaveBeenCalled()
     expect(screen.queryByText(/Session Active/)).toBeNull()
+    expect(screen.getByPlaceholderText('Paste your LiveKit access token here').value).toBe('')
   })
 
   it('attaches remote audio even when it arrives during connection setup', () => {
