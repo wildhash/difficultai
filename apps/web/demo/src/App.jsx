@@ -61,9 +61,8 @@ function App() {
       return
     }
 
-    // Keep the short-lived credential in React state only until the SDK consumes it.
-    // Clearing synchronously also prevents an older, pending attempt from erasing a
-    // token entered for a later retry.
+    // Minimize how long the short-lived credential remains in component state;
+    // the SDK receives the captured local value for this connection attempt.
     setAccessToken('')
     
     const room = new Room()
@@ -295,6 +294,7 @@ function App() {
               <strong>Note:</strong> To connect directly, you need a LiveKit access token.
               See README for token generation instructions.
               Scenario JSON is only used if it was set as room metadata when the room was created.
+              For security, the token is cleared when a connection attempt starts; paste it again to retry.
             </p>
             
             <div className="form-group">
@@ -324,7 +324,7 @@ function App() {
                 value={accessToken}
                 onChange={(e) => setAccessToken(e.target.value)}
                 placeholder="Paste your LiveKit access token here"
-                autoComplete="off"
+                autoComplete="new-password"
                 spellCheck={false}
               />
             </div>

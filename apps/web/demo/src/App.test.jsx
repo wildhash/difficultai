@@ -78,6 +78,7 @@ describe('room lifecycle', () => {
     expect(room.localParticipant.setMicrophoneEnabled).not.toHaveBeenCalled()
     const tokenInput = screen.getByPlaceholderText('Paste your LiveKit access token here')
     expect(tokenInput.type).toBe('password')
+    expect(tokenInput.autocomplete).toBe('new-password')
     expect(tokenInput.value).toBe('')
   })
 

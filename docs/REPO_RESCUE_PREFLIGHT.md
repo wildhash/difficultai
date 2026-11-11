@@ -1114,7 +1114,8 @@ immediate clearing preserve the existing owner workflow while reducing browser
 credential exposure and avoiding a stale asynchronous attempt clearing a newer
 token.
 
-Decision: use a password input with browser completion and spellcheck disabled.
+Decision: use a password input that requests a non-reused browser value and has
+spellcheck disabled, and tell the operator that retries require pasting again.
 After non-empty fields validate, snapshot the trimmed token for the one SDK call
 and synchronously clear React state before any asynchronous provider work.
 
