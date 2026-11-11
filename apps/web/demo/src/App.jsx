@@ -54,10 +54,17 @@ function App() {
   // Connect to room
   const connectToRoom = async () => {
     if (roomRef.current) return
-    if (!livekitUrl.trim() || !accessToken.trim() || !roomName.trim()) {
+    const trimmedUrl = livekitUrl.trim()
+    const trimmedToken = accessToken.trim()
+    if (!trimmedUrl || !trimmedToken || !roomName.trim()) {
       alert('Please fill in all connection fields: LiveKit URL, Access Token, and Room Name')
       return
     }
+
+    // Keep the short-lived credential in React state only until the SDK consumes it.
+    // Clearing synchronously also prevents an older, pending attempt from erasing a
+    // token entered for a later retry.
+    setAccessToken('')
     
     const room = new Room()
     roomRef.current = room
@@ -111,7 +118,7 @@ function App() {
       })
       
       // Connect to room
-      await room.connect(livekitUrl.trim(), accessToken.trim())
+      await room.connect(trimmedUrl, trimmedToken)
       if (roomRef.current !== room) {
         await room.disconnect()
         return
@@ -312,11 +319,13 @@ function App() {
             
             <div className="form-group">
               <label>Access Token:</label>
-              <textarea
+              <input
+                type="password"
                 value={accessToken}
                 onChange={(e) => setAccessToken(e.target.value)}
                 placeholder="Paste your LiveKit access token here"
-                rows={3}
+                autoComplete="off"
+                spellCheck={false}
               />
             </div>
             

@@ -1095,3 +1095,42 @@ startup; then complete one real owner session and retained-evidence workflow.
 Rollback: revert this provider check and regressions to restore LiveKit-only
 deployment preflight. This repair itself creates no content, session, worker,
 volume, deployment, or evidence.
+
+### 2026-11-11: minimize browser retention of the owner access token
+
+Baseline: `534b7a99c63d23ea1ca4525784b6ce8041c77e8e` (merged PR #37).
+Its Python/image and both Pages workflows passed. DifficultAI, RepoMan, and
+make_my_day have no open PR or issue. The static pilot remains deployed, while
+the credentialed voice worker and real owner workflow remain unrun here.
+
+Diagnosis: the direct-connect form rendered the short-lived LiveKit JWT in a
+plain textarea and retained it in React state after handing it to the SDK. A
+screen observer could read it, and returning to the form after a failed or
+cancelled attempt exposed the stale credential again.
+
+Alternatives: remove direct connection, retain the token for convenient retries,
+or mask it and clear application state as soon as connection begins. Masking and
+immediate clearing preserve the existing owner workflow while reducing browser
+credential exposure and avoiding a stale asynchronous attempt clearing a newer
+token.
+
+Decision: use a password input with browser completion and spellcheck disabled.
+After non-empty fields validate, snapshot the trimmed token for the one SDK call
+and synchronously clear React state before any asynchronous provider work.
+
+Verification: regressions must prove masking and clearing after rejected and
+cancelled connections. The web unit suite, production build, exact-head CI, and
+review must pass before merge.
+
+Limitations: JavaScript and the LiveKit SDK still hold the token while connecting
+and as required for the active room. This does not deploy the voice worker,
+validate credentials, exercise live audio, verify persistent evidence, establish
+owner acceptance, or prove customer activity, payment, or revenue.
+
+Next executable step: after merge and Pages deployment, use clean main on the
+intended Docker host, pass both provider preflights, create one short-lived owner
+token, and complete one real owner session plus retained-evidence verification.
+
+Rollback: revert this UI and regression change to restore visible, retained token
+entry. No credential, provider request, session, worker, or evidence is created
+by this repair.
