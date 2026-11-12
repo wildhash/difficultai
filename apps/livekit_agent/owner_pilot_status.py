@@ -4,6 +4,8 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
+import stat
 import sys
 
 ROOT = str(Path(__file__).resolve().parents[2])
@@ -13,6 +15,36 @@ if ROOT not in sys.path:
 from apps.livekit_agent.replacement_receipt import verify_replacement
 from apps.livekit_agent.verify_owner_acceptance import verify_owner_acceptance
 from apps.livekit_agent.verify_scorecard import SESSION_ID, verify_scorecard
+
+SCORECARD_FILE = re.compile(r"scorecard_([0-9a-f]{32})[.]json")
+
+
+def latest_owner_pilot_status(directory: Path) -> dict:
+    """Discover the newest retained session without reading private content."""
+    candidates = []
+    try:
+        for path in directory.iterdir():
+            match = SCORECARD_FILE.fullmatch(path.name)
+            if not match:
+                continue
+            metadata = path.lstat()
+            if stat.S_ISREG(metadata.st_mode):
+                candidates.append((metadata.st_mtime_ns, match.group(1)))
+    except FileNotFoundError:
+        candidates = []
+    except OSError:
+        return _report(
+            None, "evidence_unavailable", "blocked", [],
+            "Restore access to the private scorecard volume and rerun this command.",
+        )
+
+    if not candidates:
+        return _report(
+            None, "no_sessions", "incomplete", [],
+            "Complete one live owner session, then rerun make owner-pilot-latest.",
+        )
+    _, session_id = max(candidates)
+    return owner_pilot_status(directory, session_id)
 
 
 def owner_pilot_status(directory: Path, session_id: str) -> dict:
@@ -158,13 +190,20 @@ def _report(session_id, stage, status, checks, next_action,
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("session_id", help="Session ID emitted by the voice worker")
+    parser.add_argument("session_id", nargs="?", help="Session ID emitted by the voice worker")
+    parser.add_argument("--latest", action="store_true",
+                        help="discover the newest retained owner session")
     parser.add_argument(
         "--scorecard-dir", type=Path,
         default=Path(os.getenv("SCORECARD_DIR", "scorecards")),
     )
     args = parser.parse_args(argv)
-    report = owner_pilot_status(args.scorecard_dir, args.session_id)
+    if args.latest == bool(args.session_id):
+        parser.error("provide one session ID or --latest")
+    report = (
+        latest_owner_pilot_status(args.scorecard_dir)
+        if args.latest else owner_pilot_status(args.scorecard_dir, args.session_id)
+    )
     print(json.dumps(report, indent=2))
     return 1 if report["status"] == "blocked" else 0
 

@@ -41,7 +41,14 @@ a fixture remains readable by a replacement container on its configured named
 volume. The check uses an isolated Compose project and deletes its fixture
 volume. This is deployment-contract evidence only; it does not establish a
 running worker or retained live scorecard.
-After a real completed session, retain its session ID and run:
+After a real completed session, discover its retained session ID without reading
+private content, then run the reported next step:
+
+```bash
+make owner-pilot-latest
+```
+
+For a valid completed scorecard, that next step is:
 
 ```bash
 make owner-pilot-replace SESSION_ID=<session-id>
