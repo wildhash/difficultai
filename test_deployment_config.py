@@ -64,13 +64,14 @@ class DeploymentConfigTests(unittest.TestCase):
     def test_owner_evidence_commands_use_the_deployed_volume(self):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         normalized = " ".join(makefile.split())
+        self.assertIn("owner-pilot-latest:", makefile)
         self.assertIn("owner-pilot-status:", makefile)
         self.assertIn(
             "OWNER_PILOT_COMPOSE = docker compose --file compose.owner-pilot.yml",
             makefile,
         )
         for module in (
-            "owner_pilot_status", "verify_scorecard",
+            "owner_pilot_status --latest", "owner_pilot_status", "verify_scorecard",
             "record_owner_acceptance", "verify_owner_acceptance",
         ):
             self.assertIn(

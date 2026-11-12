@@ -2,12 +2,17 @@ import contextlib
 from datetime import datetime, timezone
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from apps.livekit_agent.owner_pilot_status import main, owner_pilot_status
+from apps.livekit_agent.owner_pilot_status import (
+    latest_owner_pilot_status,
+    main,
+    owner_pilot_status,
+)
 from apps.livekit_agent.record_owner_acceptance import record_acceptance
 from apps.livekit_agent.replacement_receipt import record_replacement
 from difficultai.scorecard import SCORECARD_DIMENSIONS
@@ -134,6 +139,57 @@ class OwnerPilotStatusTests(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertNotIn(str(self.directory), output.getvalue())
         self.assertEqual(json.loads(output.getvalue())["stage"], "session_pending")
+
+    def test_latest_reports_no_sessions_without_requiring_an_id(self):
+        report = latest_owner_pilot_status(self.directory)
+        self.assertEqual(report["stage"], "no_sessions")
+        self.assertEqual(report["status"], "incomplete")
+        self.assertIsNone(report["session_id"])
+
+    def test_latest_selects_newest_retained_scorecard_and_reports_next_step(self):
+        older_id = "b" * 32
+        older = self.directory / f"scorecard_{older_id}.json"
+        older_payload = valid_scorecard()
+        older_payload["session_id"] = older_id
+        older.write_text(json.dumps(older_payload), encoding="utf-8")
+        self.scorecard.write_text(json.dumps(valid_scorecard()), encoding="utf-8")
+        older_time = older.stat().st_mtime_ns
+        newer_time = older_time + 1_000_000
+        os.utime(self.scorecard, ns=(newer_time, newer_time))
+
+        report = latest_owner_pilot_status(self.directory)
+        self.assertEqual(report["session_id"], SESSION_ID)
+        self.assertEqual(report["stage"], "scorecard_verified")
+        self.assertIn(f"SESSION_ID={SESSION_ID}", report["next_action"])
+
+    def test_latest_ignores_unrelated_and_symlinked_files(self):
+        private = self.directory / "private.json"
+        private.write_text(json.dumps(valid_scorecard()), encoding="utf-8")
+        self.scorecard.symlink_to(private)
+        (self.directory / "scorecard_not-a-session.json").write_text(
+            "private", encoding="utf-8"
+        )
+        report = latest_owner_pilot_status(self.directory)
+        self.assertEqual(report["stage"], "no_sessions")
+        self.assertNotIn("private", json.dumps(report))
+
+    def test_latest_sanitizes_inaccessible_volume(self):
+        with patch.object(Path, "iterdir", side_effect=PermissionError("private path")):
+            report = latest_owner_pilot_status(self.directory)
+        self.assertEqual(report["stage"], "evidence_unavailable")
+        self.assertEqual(report["status"], "blocked")
+        self.assertNotIn("private path", json.dumps(report))
+
+    def test_latest_cli_outputs_only_privacy_safe_status(self):
+        self.scorecard.write_text(json.dumps(valid_scorecard()), encoding="utf-8")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            status = main(["--latest", "--scorecard-dir", str(self.directory)])
+        payload = json.loads(output.getvalue())
+        self.assertEqual(status, 0)
+        self.assertEqual(payload["session_id"], SESSION_ID)
+        self.assertNotIn("private user turn", output.getvalue())
+        self.assertNotIn(str(self.directory), output.getvalue())
 
 
 if __name__ == "__main__":

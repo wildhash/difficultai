@@ -174,8 +174,10 @@ the default directory is ignored by Git. Configure a persistent volume for
 retention across worker/container replacement. This file store does not provide
 authenticated customer retrieval or managed backups.
 
-For a replacement-durability check, retain the worker's session ID and run
-`make owner-pilot-replace SESSION_ID=<session-id>`. The command requires the
+For a replacement-durability check, run `make owner-pilot-latest` after the
+session. It safely discovers the newest regular scorecard in the deployed volume
+and reports its session ID and next step without printing private content. Then
+run `make owner-pilot-replace SESSION_ID=<session-id>`. The command requires the
 worker and a structurally valid scorecard before replacement, force recreates
 only that worker with the same Compose volume, then revalidates the scorecard
 and compares its unprinted SHA-256 fingerprint. It never prints private

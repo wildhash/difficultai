@@ -1135,3 +1135,44 @@ token, and complete one real owner session plus retained-evidence verification.
 Rollback: revert this UI and regression change to restore visible, retained token
 entry. No credential, provider request, session, worker, or evidence is created
 by this repair.
+
+### 2026-11-12: discover the retained owner session safely
+
+Baseline: `ff799f657416b4a340dfad6b9666b4ff4b9fc7e2` (merged PR #38).
+Its exact-head and post-merge Pages workflows passed, and the deployed token
+field was verified. DifficultAI, RepoMan, and make_my_day have no open PR or
+issue. The voice worker and real owner workflow remain unrun here.
+
+Diagnosis: every post-session durability and acceptance command requires the
+worker's 32-character session ID, but the runbook only told the operator to
+retain it. After a real call, the durable source is the private scorecard volume;
+recovering the ID otherwise requires parsing logs or inspecting private storage.
+
+Alternatives: document a log command, print the ID in the browser, list every
+retained session, or discover only the newest scorecard through the deployed
+worker. Newest-session discovery is the smallest handoff: it keeps private
+evidence inside the container and feeds the existing status verifier.
+
+Decision: add `make owner-pilot-latest`. It scans only regular files matching
+`scorecard_<32 lowercase hex>.json`, selects the newest by filesystem timestamp,
+and returns the existing privacy-safe stage and exact next command. Unrelated
+files and symlinks are ignored; missing evidence is incomplete, while inaccessible
+storage blocks progress with a sanitized result.
+
+Verification: regressions cover empty storage, deterministic newest selection,
+unrelated and symlinked files, inaccessible storage, sanitized CLI output, and
+Compose-volume routing. The full Python suite, offline preflight, exact-head CI,
+worker-image rehearsal, and review must pass before merge.
+
+Limitations: filesystem recency identifies the newest saved scorecard, not the
+operator's intended session. This does not deploy the worker, validate providers,
+exercise live audio, create real evidence, establish owner acceptance, or prove
+customer activity, payment, or revenue.
+
+Next executable step: after merge, deploy clean main on the credentialed Docker
+host, complete one owner session, run `make owner-pilot-latest`, and follow its
+reported replacement and acceptance steps until the retained chain verifies.
+
+Rollback: revert this command, regressions, and documentation. It is read-only
+and creates, changes, or removes no credential, session, worker, volume, or
+evidence.

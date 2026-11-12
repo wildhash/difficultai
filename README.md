@@ -232,8 +232,17 @@ checks local components and storage without credentials. Each run retains a JSON
 report under `$SCORECARD_DIR/preflight` with outcomes and the next action. See
 [preflight evidence and acceptance steps](docs/REPO_RESCUE_PREFLIGHT.md).
 
-After a real owner session, record the worker's 32-character session ID and use
-the guarded replacement command:
+After a real owner session, recover its 32-character session ID and next safe
+step from the private Compose volume:
+
+```bash
+make owner-pilot-latest
+```
+
+The command selects the newest regular `scorecard_<session-id>.json` file and
+reuses the privacy-safe status verifier. It emits no transcript, scenario,
+private path, or fingerprint. Use its session ID with the guarded replacement
+command:
 
 ```bash
 make owner-pilot-replace SESSION_ID=<session-id>
