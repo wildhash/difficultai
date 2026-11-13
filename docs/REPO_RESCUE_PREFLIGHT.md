@@ -1176,3 +1176,47 @@ reported replacement and acceptance steps until the retained chain verifies.
 Rollback: revert this command, regressions, and documentation. It is read-only
 and creates, changes, or removes no credential, session, worker, volume, or
 evidence.
+
+### 2026-11-13: recover retained evidence without a running worker
+
+Baseline: `bbcaac57114d912b6f98812cad81a3a8b6eac49a` (merged PR #39).
+Its exact-head Python and worker-image jobs passed. DifficultAI, RepoMan, and
+make_my_day have no open PR or issue. The static pilot remains deployed, while
+the credentialed voice worker and real owner workflow remain unrun here.
+
+Diagnosis: every volume-backed status and evidence command used `docker compose
+exec`. If the worker stopped after a failed or completed owner session, the
+named scorecard volume could remain intact while the operator lost access to
+latest-session discovery, verification, and acceptance recording.
+
+Alternatives: require the operator to restart the worker, inspect the volume
+manually, add a separate recovery service, or use the production image in a
+removable one-shot container attached to the existing volume. The one-shot path
+is smallest and matches the existing image rehearsal without starting the voice
+worker or contacting providers.
+
+Decision: route status, scorecard verification, acceptance recording, and final
+verification through `docker compose run --rm --no-deps -T worker`. Keep actual
+worker replacement on the guarded running-service path. Extend image CI to
+prove latest-session status both after the scorecard fixture is created and
+after its complete internal acceptance chain, without starting the service.
+
+Verification: Makefile contract regressions, the full Python suite, offline
+preflight, exact-head CI, the worker-image recovery rehearsal, and review must
+pass before merge.
+
+Limitations: local Docker is unavailable in this execution environment, so the
+container recovery path must be established by exact-head CI. One-shot commands
+still require the built production image, Compose file, `.env`, and accessible
+named volume. This does not deploy the worker, exercise live audio, create real
+evidence, establish owner acceptance, or prove customer activity, payment, or
+revenue.
+
+Next executable step: after merge, use clean main on the credentialed Docker
+host, deploy the worker, complete one owner session, stop the worker deliberately,
+and run `make owner-pilot-latest` before continuing the replacement and owner
+acceptance chain.
+
+Rollback: revert the Makefile, image rehearsal, regressions, and documentation
+to restore running-worker-only evidence access. No credential, provider request,
+session, worker, volume, or evidence is created by this repair itself.
