@@ -97,8 +97,7 @@ PY
 # Recovery must remain available from the retained volume even when no worker
 # service is running. This is still internal fixture evidence only.
 $compose run --rm --no-deps worker \
-  python -m apps.livekit_agent.owner_pilot_status --latest \
-  | grep -q '"stage": "scorecard_verified"'
+  python -c "from pathlib import Path; from apps.livekit_agent.owner_pilot_status import latest_owner_pilot_status; assert latest_owner_pilot_status(Path('/data/scorecards'))['stage'] == 'scorecard_verified'"
 $compose run --rm --no-deps worker \
   python apps/livekit_agent/replacement_receipt.py "$fixture_session" \
     --source-revision "$DIFFICULTAI_BUILD_SHA" >/dev/null
@@ -108,7 +107,6 @@ $compose run --rm --no-deps worker \
 $compose run --rm --no-deps worker \
   python apps/livekit_agent/verify_owner_acceptance.py "$fixture_session" >/dev/null
 $compose run --rm --no-deps worker \
-  python -m apps.livekit_agent.owner_pilot_status --latest \
-  | grep -q '"stage": "acceptance_verified"'
+  python -c "from pathlib import Path; from apps.livekit_agent.owner_pilot_status import latest_owner_pilot_status; assert latest_owner_pilot_status(Path('/data/scorecards'))['stage'] == 'acceptance_verified'"
 
 echo "worker image and internal acceptance-chain fixture verified"
