@@ -241,8 +241,10 @@ make owner-pilot-latest
 
 The command selects the newest regular `scorecard_<session-id>.json` file and
 reuses the privacy-safe status verifier. It emits no transcript, scenario,
-private path, or fingerprint. Use its session ID with the guarded replacement
-command:
+private path, or fingerprint. Evidence commands use a temporary, provider-independent
+Compose container attached to the same named volume, so recovery remains
+available even when the long-running worker is stopped. Use its session ID with
+the guarded replacement command:
 
 ```bash
 make owner-pilot-replace SESSION_ID=<session-id>

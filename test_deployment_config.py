@@ -54,6 +54,9 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn("apps/livekit_agent/replacement_receipt.py", contents)
         self.assertIn("apps/livekit_agent/record_owner_acceptance.py", contents)
         self.assertIn("apps/livekit_agent/verify_owner_acceptance.py", contents)
+        self.assertIn("latest_owner_pilot_status", contents)
+        self.assertIn("['stage'] == 'scorecard_verified'", contents)
+        self.assertIn("['stage'] == 'acceptance_verified'", contents)
         self.assertIn("internal acceptance-chain fixture", contents)
         self.assertIn("git rev-parse --verify HEAD", contents)
         self.assertIn("^[0-9a-f]{40}$", contents)
@@ -70,14 +73,22 @@ class DeploymentConfigTests(unittest.TestCase):
             "OWNER_PILOT_COMPOSE = docker compose --file compose.owner-pilot.yml",
             makefile,
         )
+        self.assertIn(
+            "OWNER_PILOT_EVIDENCE = $(OWNER_PILOT_COMPOSE) run --rm --no-deps -T worker",
+            makefile,
+        )
         for module in (
             "owner_pilot_status --latest", "owner_pilot_status", "verify_scorecard",
             "record_owner_acceptance", "verify_owner_acceptance",
         ):
             self.assertIn(
-                f"$(OWNER_PILOT_COMPOSE) exec -T worker python -m apps.livekit_agent.{module}",
+                f"$(OWNER_PILOT_EVIDENCE) python -m apps.livekit_agent.{module}",
                 normalized,
             )
+        self.assertNotIn(
+            "$(OWNER_PILOT_COMPOSE) exec -T worker python -m apps.livekit_agent.",
+            normalized,
+        )
         self.assertIn('SESSION_ID is required', makefile)
 
     def test_vite_waits_for_legacy_pages_publication(self):

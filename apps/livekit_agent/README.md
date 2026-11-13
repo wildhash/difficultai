@@ -176,8 +176,10 @@ authenticated customer retrieval or managed backups.
 
 For a replacement-durability check, run `make owner-pilot-latest` after the
 session. It safely discovers the newest regular scorecard in the deployed volume
-and reports its session ID and next step without printing private content. Then
-run `make owner-pilot-replace SESSION_ID=<session-id>`. The command requires the
+and reports its session ID and next step without printing private content. The
+status and evidence commands use removable one-shot containers on the same
+volume, so they still work if the long-running worker has stopped. Then run
+`make owner-pilot-replace SESSION_ID=<session-id>`. The command requires the
 worker and a structurally valid scorecard before replacement, force recreates
 only that worker with the same Compose volume, then revalidates the scorecard
 and compares its unprinted SHA-256 fingerprint. It never prints private
