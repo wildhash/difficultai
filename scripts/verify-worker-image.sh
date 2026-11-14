@@ -48,6 +48,7 @@ evidence="docker compose --env-file /dev/null --project-name $project --file com
 $compose config --quiet
 $evidence config --quiet
 $compose build
+docker image inspect "$image" >/dev/null
 
 # The production image must execute as the unprivileged account declared in
 # the Dockerfile and expose the supported LiveKit worker CLI.
@@ -65,6 +66,10 @@ $compose run --rm --no-deps worker \
   python -c "from pathlib import Path; Path('$marker').write_text('fixture', encoding='utf-8')"
 $evidence run --rm --no-deps evidence \
   python -c "from pathlib import Path; assert Path('$marker').read_text(encoding='utf-8') == 'fixture'"
+$evidence run --rm --no-deps evidence \
+  python -c "from pathlib import Path; Path('$marker-evidence-write').write_text('evidence', encoding='utf-8')"
+$compose run --rm --no-deps worker \
+  python -c "from pathlib import Path; assert Path('$marker-evidence-write').read_text(encoding='utf-8') == 'evidence'"
 
 # Exercise the complete private evidence chain through separate containers on
 # the configured volume. This is an internal fixture, not a real voice session,
