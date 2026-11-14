@@ -32,6 +32,22 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn("restart: unless-stopped", compose)
         self.assertIn("DIFFICULTAI_BUILD_SHA", compose)
 
+    def test_evidence_service_is_credential_free_and_network_disabled(self):
+        path = ROOT / "compose.owner-evidence.yml"
+        self.assertTrue(path.is_file(), f"Missing recovery artifact: {path}")
+        config = yaml.safe_load(path.read_text(encoding="utf-8"))
+        evidence = config["services"]["evidence"]
+        self.assertNotIn("env_file", evidence)
+        self.assertEqual(
+            evidence["image"],
+            "${DIFFICULTAI_IMAGE:-difficultai-owner-pilot:latest}",
+        )
+        self.assertEqual(evidence["network_mode"], "none")
+        self.assertIs(evidence["read_only"], True)
+        self.assertEqual(evidence["environment"]["SCORECARD_DIR"], "/data/scorecards")
+        self.assertIn("difficultai-scorecards:/data/scorecards", evidence["volumes"])
+        self.assertIn("difficultai-scorecards", config["volumes"])
+
     def test_build_context_excludes_credentials_and_runtime_evidence(self):
         path = ROOT / ".dockerignore"
         self.assertTrue(path.is_file(), f"Missing deployment artifact: {path}")
@@ -47,7 +63,12 @@ class DeploymentConfigTests(unittest.TestCase):
         contents = " ".join(script.read_text(encoding="utf-8").split())
         self.assertIn('docker compose --project-name "$project"', contents)
         self.assertIn("$compose config --quiet", contents)
+        self.assertIn("$evidence config --quiet", contents)
         self.assertIn("$compose build", contents)
+        self.assertIn('docker image inspect "$image"', contents)
+        self.assertIn("--env-file /dev/null", contents)
+        self.assertIn("--file compose.owner-evidence.yml", contents)
+        self.assertIn("marker-evidence-write", contents)
         self.assertIn("python -m apps.livekit_agent.smoke_test --offline", contents)
         self.assertIn("run --rm --no-deps -T worker", contents)
         self.assertIn("scorecard_{session_id}.json", contents)
@@ -74,7 +95,11 @@ class DeploymentConfigTests(unittest.TestCase):
             makefile,
         )
         self.assertIn(
-            "OWNER_PILOT_EVIDENCE = $(OWNER_PILOT_COMPOSE) run --rm --no-deps -T worker",
+            "OWNER_PILOT_EVIDENCE_COMPOSE = docker compose --env-file /dev/null --file compose.owner-evidence.yml",
+            makefile,
+        )
+        self.assertIn(
+            "OWNER_PILOT_EVIDENCE = $(OWNER_PILOT_EVIDENCE_COMPOSE) run --rm --no-deps -T evidence",
             makefile,
         )
         for module in (

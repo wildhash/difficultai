@@ -1,0 +1,14 @@
+services:
+  evidence:
+    image: ${DIFFICULTAI_IMAGE:-difficultai-owner-pilot:latest}
+    environment:
+      SCORECARD_DIR: /data/scorecards
+      OPIK_DISABLED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    network_mode: none
+    read_only: true
+    volumes:
+      - difficultai-scorecards:/data/scorecards
+
+volumes:
+  difficultai-scorecards:
