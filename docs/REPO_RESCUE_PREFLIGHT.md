@@ -1220,3 +1220,48 @@ acceptance chain.
 Rollback: revert the Makefile, image rehearsal, regressions, and documentation
 to restore running-worker-only evidence access. No credential, provider request,
 session, worker, volume, or evidence is created by this repair itself.
+
+### 2026-11-14: decouple evidence recovery from provider credentials
+
+Baseline: `4bb11649fd48f7b96030b4c7181062cac7a7113b` (merged PR #40).
+Its exact-head Python and worker-image recovery jobs passed. DifficultAI,
+RepoMan, and make_my_day have no open PR or issue. The static pilot remains
+deployed, while the credentialed voice worker and real owner workflow remain
+unrun here.
+
+Diagnosis: stopped-worker recovery still invoked the worker service definition.
+That service requires `.env`, so missing or rotated LiveKit/OpenAI credentials
+could block access to an otherwise intact private scorecard volume even though
+status and acceptance verification make no provider requests.
+
+Alternatives: require placeholder credentials, make the production worker's
+environment file optional, export the volume to the host, or define a separate
+evidence service. A separate service keeps the production startup contract
+strict while giving recovery the minimum runtime capabilities.
+
+Decision: add `compose.owner-evidence.yml` using the deployed image and the same
+project-scoped named volume, with no `env_file`, no network, a read-only root
+filesystem, and bytecode writes disabled. Route volume-backed status and
+acceptance commands through that service with an explicit empty Compose env
+file. Extend image CI to create evidence through the worker definition and read,
+advance, and verify it through the isolated evidence definition.
+
+Verification: configuration regressions must prove the evidence service has no
+credential file or network and shares the scorecard volume. The full Python
+suite, offline preflight, shell syntax, exact-head worker-image rehearsal, and
+review must pass before merge.
+
+Limitations: local Docker is unavailable here, so exact-head CI must prove the
+cross-file Compose volume contract. Recovery still requires the previously built
+image, Compose, and the intact named volume. This does not deploy the worker,
+exercise live audio, create real evidence, establish owner acceptance, or prove
+customer activity, payment, or revenue.
+
+Next executable step: after merge, deploy clean main on the credentialed Docker
+host, complete one owner session, stop the worker, temporarily remove `.env`,
+and run `make owner-pilot-latest` before restoring credentials and completing
+the replacement and acceptance chain.
+
+Rollback: revert the evidence Compose file, Makefile routing, image rehearsal,
+regressions, and documentation. This restores credential-dependent recovery but
+does not change or delete any retained volume or evidence.

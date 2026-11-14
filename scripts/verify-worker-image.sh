@@ -44,7 +44,9 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 export DIFFICULTAI_BUILD_SHA
 compose="docker compose --project-name $project --file compose.owner-pilot.yml"
+evidence="docker compose --env-file /dev/null --project-name $project --file compose.owner-evidence.yml"
 $compose config --quiet
+$evidence config --quiet
 $compose build
 
 # The production image must execute as the unprivileged account declared in
@@ -61,7 +63,7 @@ $compose run --rm --no-deps worker \
 # This proves the deployment wiring without claiming that a live scorecard exists.
 $compose run --rm --no-deps worker \
   python -c "from pathlib import Path; Path('$marker').write_text('fixture', encoding='utf-8')"
-$compose run --rm --no-deps worker \
+$evidence run --rm --no-deps evidence \
   python -c "from pathlib import Path; assert Path('$marker').read_text(encoding='utf-8') == 'fixture'"
 
 # Exercise the complete private evidence chain through separate containers on
@@ -96,17 +98,17 @@ destination.write_text(json.dumps(scorecard), encoding="utf-8")
 PY
 # Recovery must remain available from the retained volume even when no worker
 # service is running. This is still internal fixture evidence only.
-$compose run --rm --no-deps worker \
+$evidence run --rm --no-deps evidence \
   python -c "from pathlib import Path; from apps.livekit_agent.owner_pilot_status import latest_owner_pilot_status; assert latest_owner_pilot_status(Path('/data/scorecards'))['stage'] == 'scorecard_verified'"
-$compose run --rm --no-deps worker \
+$evidence run --rm --no-deps evidence \
   python apps/livekit_agent/replacement_receipt.py "$fixture_session" \
     --source-revision "$DIFFICULTAI_BUILD_SHA" >/dev/null
-$compose run --rm --no-deps worker \
+$evidence run --rm --no-deps evidence \
   python apps/livekit_agent/record_owner_acceptance.py "$fixture_session" \
     --decision accepted --audio-quality acceptable >/dev/null
-$compose run --rm --no-deps worker \
+$evidence run --rm --no-deps evidence \
   python apps/livekit_agent/verify_owner_acceptance.py "$fixture_session" >/dev/null
-$compose run --rm --no-deps worker \
+$evidence run --rm --no-deps evidence \
   python -c "from pathlib import Path; from apps.livekit_agent.owner_pilot_status import latest_owner_pilot_status; assert latest_owner_pilot_status(Path('/data/scorecards'))['stage'] == 'acceptance_verified'"
 
 echo "worker image and internal acceptance-chain fixture verified"

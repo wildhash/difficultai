@@ -1,7 +1,8 @@
 .PHONY: dev test smoke-test preflight-offline owner-pilot-ready owner-pilot-deploy owner-pilot-replace owner-pilot-latest owner-pilot-status owner-session verify-scorecard record-owner-acceptance verify-owner-acceptance opik-smoke-test opik-eval-suite install clean help
 
 OWNER_PILOT_COMPOSE = docker compose --file compose.owner-pilot.yml
-OWNER_PILOT_EVIDENCE = $(OWNER_PILOT_COMPOSE) run --rm --no-deps -T worker
+OWNER_PILOT_EVIDENCE_COMPOSE = docker compose --env-file /dev/null --file compose.owner-evidence.yml
+OWNER_PILOT_EVIDENCE = $(OWNER_PILOT_EVIDENCE_COMPOSE) run --rm --no-deps -T evidence
 
 # Default target
 help:

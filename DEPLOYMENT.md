@@ -48,9 +48,10 @@ private content, then run the reported next step:
 make owner-pilot-latest
 ```
 
-This starts a disposable `--no-deps` container with the deployed image and
-named scorecard volume; it does not require the worker service to be running or
-contact either provider. The container is removed after the command.
+This starts a disposable `--no-deps` evidence container with the deployed image
+and named scorecard volume. Its root filesystem is read-only, networking is
+disabled, and it does not load `.env`; it therefore requires neither a running
+worker nor provider credentials. The container is removed after the command.
 
 For a valid completed scorecard, that next step is:
 
