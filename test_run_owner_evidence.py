@@ -13,6 +13,7 @@ from unittest.mock import Mock
 
 MODULE_PATH = Path(__file__).parent / "apps" / "livekit_agent" / "run_owner_evidence.py"
 SPEC = importlib.util.spec_from_file_location("run_owner_evidence", MODULE_PATH)
+assert SPEC is not None and SPEC.loader is not None
 evidence = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(evidence)
 
@@ -35,6 +36,7 @@ class OwnerEvidenceRunnerTests(unittest.TestCase):
         ])
         self.assertIn("--no-deps", command)
         self.assertIn("evidence", command)
+        self.assertIn("--name", command)
         self.assertEqual(command[-4:], [
             "python", "-m", "apps.livekit_agent.owner_pilot_status", "--latest"
         ])
@@ -46,13 +48,24 @@ class OwnerEvidenceRunnerTests(unittest.TestCase):
         runner = Mock(side_effect=subprocess.TimeoutExpired(
             ["docker", "private-detail"], 1, stderr="secret"
         ))
+        cleanup_runner = Mock(return_value=SimpleNamespace(returncode=0))
         output = io.StringIO()
         with redirect_stderr(output):
-            code = evidence.main(["owner_pilot_status", "--latest"], runner=runner)
+            code = evidence.main(
+                ["owner_pilot_status", "--latest"], runner=runner,
+                cleanup_runner=cleanup_runner,
+            )
         self.assertEqual(code, 1)
         self.assertIn("timed out", output.getvalue())
         self.assertNotIn("private-detail", output.getvalue())
         self.assertNotIn("secret", output.getvalue())
+        cleanup_command = cleanup_runner.call_args.args[0]
+        self.assertEqual(cleanup_command[:3], ["docker", "rm", "--force"])
+        self.assertIn("difficultai-owner-evidence-", cleanup_command[3])
+        self.assertEqual(
+            cleanup_runner.call_args.kwargs["timeout"],
+            evidence.CLEANUP_TIMEOUT_SECONDS,
+        )
 
     def test_failed_module_preserves_only_its_sanitized_stdout(self):
         runner = Mock(return_value=SimpleNamespace(

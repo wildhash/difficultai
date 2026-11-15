@@ -1,6 +1,7 @@
 """Run one bounded owner-evidence command in the isolated Compose service."""
 
 import argparse
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -18,12 +19,18 @@ MODULES = (
     "verify_owner_acceptance",
 )
 COMMAND_TIMEOUT_SECONDS = 2 * 60
+CLEANUP_TIMEOUT_SECONDS = 15
 
 
-def run_evidence(module, arguments, *, root=ROOT, runner=subprocess.run):
+def run_evidence(
+    module, arguments, *, root=ROOT, runner=subprocess.run,
+    cleanup_runner=subprocess.run,
+):
     """Return a bounded result while keeping Docker errors out of public output."""
+    container_name = f"difficultai-owner-evidence-{os.getpid()}"
     command = [
-        *COMPOSE, "run", "--rm", "--no-deps", "-T", "evidence",
+        *COMPOSE, "run", "--rm", "--no-deps", "-T",
+        "--name", container_name, "evidence",
         "python", "-m", f"apps.livekit_agent.{module}", *arguments,
     ]
     try:
@@ -36,6 +43,14 @@ def run_evidence(module, arguments, *, root=ROOT, runner=subprocess.run):
             timeout=COMMAND_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired as error:
+        try:
+            cleanup_runner(
+                ["docker", "rm", "--force", container_name],
+                cwd=Path(root), check=False, capture_output=True, text=True,
+                timeout=CLEANUP_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
         raise RuntimeError(
             "Evidence command timed out; inspect local Docker state before retrying"
         ) from error
@@ -45,13 +60,17 @@ def run_evidence(module, arguments, *, root=ROOT, runner=subprocess.run):
         ) from error
 
 
-def main(argv=None, *, root=ROOT, runner=subprocess.run):
+def main(
+    argv=None, *, root=ROOT, runner=subprocess.run,
+    cleanup_runner=subprocess.run,
+):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("module", choices=MODULES)
     args, module_args = parser.parse_known_args(argv)
     try:
         result = run_evidence(
-            args.module, module_args, root=root, runner=runner
+            args.module, module_args, root=root, runner=runner,
+            cleanup_runner=cleanup_runner,
         )
     except RuntimeError as error:
         print(f"Owner evidence command blocked: {error}", file=sys.stderr)

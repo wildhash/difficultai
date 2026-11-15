@@ -103,8 +103,9 @@ destination.write_text(json.dumps(scorecard), encoding="utf-8")
 PY
 # Recovery must remain available from the retained volume even when no worker
 # service is running. This is still internal fixture evidence only.
-COMPOSE_PROJECT_NAME="$project" python apps/livekit_agent/run_owner_evidence.py \
-  owner_pilot_status --latest \
+status_json=$(COMPOSE_PROJECT_NAME="$project" python apps/livekit_agent/run_owner_evidence.py \
+  owner_pilot_status --latest) || exit 1
+printf '%s\n' "$status_json" \
   | python -c "import json,sys; assert json.load(sys.stdin)['stage'] == 'scorecard_verified'"
 $evidence run --rm --no-deps evidence \
   python apps/livekit_agent/replacement_receipt.py "$fixture_session" \
@@ -114,8 +115,9 @@ $evidence run --rm --no-deps evidence \
     --decision accepted --audio-quality acceptable >/dev/null
 $evidence run --rm --no-deps evidence \
   python apps/livekit_agent/verify_owner_acceptance.py "$fixture_session" >/dev/null
-COMPOSE_PROJECT_NAME="$project" python apps/livekit_agent/run_owner_evidence.py \
-  owner_pilot_status --latest \
+status_json=$(COMPOSE_PROJECT_NAME="$project" python apps/livekit_agent/run_owner_evidence.py \
+  owner_pilot_status --latest) || exit 1
+printf '%s\n' "$status_json" \
   | python -c "import json,sys; assert json.load(sys.stdin)['stage'] == 'acceptance_verified'"
 
 echo "worker image and internal acceptance-chain fixture verified"

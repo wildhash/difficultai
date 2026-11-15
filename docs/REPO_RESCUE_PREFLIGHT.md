@@ -1288,7 +1288,9 @@ Decision: add a strict four-module wrapper with a two-minute subprocess
 deadline. Route every volume-backed evidence Make target through it. Preserve
 only command stdout, which is already covered by privacy-safe module contracts,
 and replace Docker start, timeout, and stderr details with sanitized guidance.
-Exercise the same wrapper in the worker-image recovery rehearsal.
+Name each one-off container and make one bounded force-removal attempt after a
+timeout. Exercise the same wrapper in the worker-image recovery rehearsal, and
+preserve its exit status before parsing the privacy-safe JSON assertion.
 
 Verification: regressions must prove the exact credential-free, network-disabled
 Compose command, allowlisted module mapping, deadline, timeout redaction, and
