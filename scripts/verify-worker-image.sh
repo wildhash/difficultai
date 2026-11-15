@@ -103,8 +103,9 @@ destination.write_text(json.dumps(scorecard), encoding="utf-8")
 PY
 # Recovery must remain available from the retained volume even when no worker
 # service is running. This is still internal fixture evidence only.
-$evidence run --rm --no-deps evidence \
-  python -c "from pathlib import Path; from apps.livekit_agent.owner_pilot_status import latest_owner_pilot_status; assert latest_owner_pilot_status(Path('/data/scorecards'))['stage'] == 'scorecard_verified'"
+COMPOSE_PROJECT_NAME="$project" python apps/livekit_agent/run_owner_evidence.py \
+  owner_pilot_status --latest \
+  | python -c "import json,sys; assert json.load(sys.stdin)['stage'] == 'scorecard_verified'"
 $evidence run --rm --no-deps evidence \
   python apps/livekit_agent/replacement_receipt.py "$fixture_session" \
     --source-revision "$DIFFICULTAI_BUILD_SHA" >/dev/null
@@ -113,7 +114,8 @@ $evidence run --rm --no-deps evidence \
     --decision accepted --audio-quality acceptable >/dev/null
 $evidence run --rm --no-deps evidence \
   python apps/livekit_agent/verify_owner_acceptance.py "$fixture_session" >/dev/null
-$evidence run --rm --no-deps evidence \
-  python -c "from pathlib import Path; from apps.livekit_agent.owner_pilot_status import latest_owner_pilot_status; assert latest_owner_pilot_status(Path('/data/scorecards'))['stage'] == 'acceptance_verified'"
+COMPOSE_PROJECT_NAME="$project" python apps/livekit_agent/run_owner_evidence.py \
+  owner_pilot_status --latest \
+  | python -c "import json,sys; assert json.load(sys.stdin)['stage'] == 'acceptance_verified'"
 
 echo "worker image and internal acceptance-chain fixture verified"

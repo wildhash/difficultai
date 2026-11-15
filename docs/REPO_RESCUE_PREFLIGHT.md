@@ -1265,3 +1265,48 @@ the replacement and acceptance chain.
 Rollback: revert the evidence Compose file, Makefile routing, image rehearsal,
 regressions, and documentation. This restores credential-dependent recovery but
 does not change or delete any retained volume or evidence.
+
+### 2026-11-15: bound isolated evidence commands
+
+Baseline: `ecac1d66970bdc3620d60004a5acccbe4a23b7d5` (merged PR #41).
+Its exact-head Python and worker-image jobs passed. DifficultAI, RepoMan, and
+make_my_day have no open PR or issue. The static pilot remains deployed, while
+the credentialed voice worker and real owner workflow remain unrun here.
+
+Diagnosis: the deployment and replacement paths have subprocess deadlines, but
+every recovery command invoked `docker compose run` directly. A stalled Docker
+daemon, image lookup, or container command could therefore block the owner at a
+recovery or acceptance gate indefinitely.
+
+Alternatives: require an external shell `timeout`, duplicate deadline handling
+in each Make target, configure only application-level timeouts, or add one
+host-side wrapper for the isolated evidence service. A wrapper is portable
+across the existing Python-supported hosts, centralizes the allowlist and error
+redaction, and leaves the evidence modules and Compose isolation unchanged.
+
+Decision: add a strict four-module wrapper with a two-minute subprocess
+deadline. Route every volume-backed evidence Make target through it. Preserve
+only command stdout, which is already covered by privacy-safe module contracts,
+and replace Docker start, timeout, and stderr details with sanitized guidance.
+Exercise the same wrapper in the worker-image recovery rehearsal.
+
+Verification: regressions must prove the exact credential-free, network-disabled
+Compose command, allowlisted module mapping, deadline, timeout redaction, and
+Docker-stderr suppression. The full Python suite, offline preflight, shell
+syntax, exact-head worker-image rehearsal, and review must pass before merge.
+
+Limitations: the deadline bounds the local Docker client invocation; it cannot
+repair a failed daemon or prove provider connectivity. Local Docker is
+unavailable here, so exact-head CI must exercise the container path. This does
+not deploy the worker, exercise live audio, create real evidence, establish
+owner acceptance, or prove customer activity, payment, or revenue.
+
+Next executable step: after merge, deploy clean main on the credentialed Docker
+host, complete one owner session, stop the worker, and run `make
+owner-pilot-latest`. Follow its reported replacement and acceptance steps while
+retaining the private scorecard volume.
+
+Rollback: revert the wrapper, Makefile routing, image rehearsal, regressions,
+and documentation to restore direct unbounded evidence commands. No credential,
+provider request, session, worker, volume, or evidence is created or changed by
+this repair itself.

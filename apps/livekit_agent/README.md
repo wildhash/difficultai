@@ -180,8 +180,11 @@ and reports its session ID and next step without printing private content. The
 status and evidence commands use removable one-shot containers on the same
 volume. The evidence service has a read-only root filesystem, no network, and no
 provider environment file, so it still works if the long-running worker has
-stopped or credentials are unavailable. Then run `make owner-pilot-replace
-SESSION_ID=<session-id>`. The command requires the
+stopped or credentials are unavailable. Each evidence command has a two-minute
+deadline and does not forward raw Docker
+stderr. If the sanitized result reports a Docker block, inspect Docker locally
+before retrying. Then run `make owner-pilot-replace SESSION_ID=<session-id>`.
+The command requires the
 worker and a structurally valid scorecard before replacement, force recreates
 only that worker with the same Compose volume, then revalidates the scorecard
 and compares its unprinted SHA-256 fingerprint. It never prints private

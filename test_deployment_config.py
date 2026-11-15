@@ -75,7 +75,7 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn("apps/livekit_agent/replacement_receipt.py", contents)
         self.assertIn("apps/livekit_agent/record_owner_acceptance.py", contents)
         self.assertIn("apps/livekit_agent/verify_owner_acceptance.py", contents)
-        self.assertIn("latest_owner_pilot_status", contents)
+        self.assertIn("apps/livekit_agent/run_owner_evidence.py", contents)
         self.assertIn("['stage'] == 'scorecard_verified'", contents)
         self.assertIn("['stage'] == 'acceptance_verified'", contents)
         self.assertIn("internal acceptance-chain fixture", contents)
@@ -95,11 +95,7 @@ class DeploymentConfigTests(unittest.TestCase):
             makefile,
         )
         self.assertIn(
-            "OWNER_PILOT_EVIDENCE_COMPOSE = docker compose --env-file /dev/null --file compose.owner-evidence.yml",
-            makefile,
-        )
-        self.assertIn(
-            "OWNER_PILOT_EVIDENCE = $(OWNER_PILOT_EVIDENCE_COMPOSE) run --rm --no-deps -T evidence",
+            "OWNER_PILOT_EVIDENCE = python apps/livekit_agent/run_owner_evidence.py",
             makefile,
         )
         for module in (
@@ -107,7 +103,7 @@ class DeploymentConfigTests(unittest.TestCase):
             "record_owner_acceptance", "verify_owner_acceptance",
         ):
             self.assertIn(
-                f"$(OWNER_PILOT_EVIDENCE) python -m apps.livekit_agent.{module}",
+                f"$(OWNER_PILOT_EVIDENCE) {module}",
                 normalized,
             )
         self.assertNotIn(
