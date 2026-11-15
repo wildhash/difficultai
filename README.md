@@ -247,6 +247,12 @@ no provider credentials, so recovery remains available when the long-running
 worker is stopped or its `.env` is unavailable. Use its session ID with the
 guarded replacement command:
 
+Each evidence command has a two-minute host-side deadline. Docker startup and
+container failures are reported without forwarding Docker stderr, which can
+contain private host or registry details.
+If the deadline expires, the wrapper also makes a bounded attempt to force-remove
+that exact one-off container before reporting the block.
+
 ```bash
 make owner-pilot-replace SESSION_ID=<session-id>
 ```

@@ -52,6 +52,8 @@ This starts a disposable `--no-deps` evidence container with the deployed image
 and named scorecard volume. Its root filesystem is read-only, networking is
 disabled, and it does not load `.env`; it therefore requires neither a running
 worker nor provider credentials. The container is removed after the command.
+The host wrapper limits each evidence command to two minutes and suppresses raw
+Docker errors; inspect Docker locally if its sanitized message reports a block.
 
 For a valid completed scorecard, that next step is:
 
