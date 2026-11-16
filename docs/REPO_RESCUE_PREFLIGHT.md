@@ -1312,3 +1312,47 @@ Rollback: revert the wrapper, Makefile routing, image rehearsal, regressions,
 and documentation to restore direct unbounded evidence commands. No credential,
 provider request, session, worker, volume, or evidence is created or changed by
 this repair itself.
+
+### 2026-11-16: bind owner-session creation to the deployed worker
+
+Baseline: `915056158bd9b81b318449d11cb3be9e3d7a2cc4` (merged PR #42).
+Its post-merge Python, worker-image, custom Pages, and GitHub Pages workflows
+passed. DifficultAI, RepoMan, and make_my_day have no open PR or issue. The
+static pilot is deployed, while the credentialed voice worker and real owner
+workflow remain unrun here.
+
+Diagnosis: `make owner-session` validated its scenario and credentials, then
+created a LiveKit room and bearer token without checking the worker. A stopped
+worker or one built from another commit would leave the owner with credentialed
+provider state that could not produce the intended exact-revision pilot.
+
+Alternatives: rely on runbook ordering, call the full deploy command every time,
+start the worker automatically, or add a read-only gate to the session launcher.
+The read-only gate is smallest: it preserves deployment policy and makes no
+provider request when the worker is absent or stale.
+
+Decision: before constructing a token or contacting LiveKit, require a clean Git
+checkout, a running Compose `worker` service, and an embedded
+`DIFFICULTAI_BUILD_SHA` equal to the current 40-character commit. Bound both
+Docker checks to 30 seconds, suppress raw Docker output, and return only
+sanitized repair guidance.
+
+Verification: regressions must prove the gate orders status before exact-revision
+verification, carries the source revision into Compose interpolation, blocks a
+stopped or stale worker before provider I/O, and rejects a dirty checkout before
+Docker. The full Python suite, offline preflight, exact-head CI, and review must
+pass before merge.
+
+Limitations: substituted Docker responses establish command ordering and
+fail-closed behavior locally; they do not deploy a worker or validate provider
+credentials. This change does not exercise live audio, create a real scorecard,
+establish owner acceptance, or prove customer activity, payment, or revenue.
+
+Next executable step: after merge, use clean main on the credentialed Docker
+host, run `make owner-pilot-deploy`, then run `make owner-session
+SCENARIO=<private-json-path>` and complete one retained evidence and acceptance
+chain.
+
+Rollback: revert the owner-session gate, regressions, and documentation to
+restore unguarded room and token creation. No credential, provider request,
+session, worker, volume, or evidence is created by this repair itself.

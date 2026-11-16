@@ -122,6 +122,10 @@ metadata through the pinned SDK:
 make owner-session SCENARIO=owner-scenario.json
 ```
 
+The launcher first verifies that the checkout is clean and the Compose worker is
+running the same exact Git revision. A stopped or stale worker blocks before any
+LiveKit room or access token is created; run `make owner-pilot-deploy` and retry.
+
 The command emits a short-lived participant token for that exact room. Keep its
 output local because it contains a bearer token.
 
