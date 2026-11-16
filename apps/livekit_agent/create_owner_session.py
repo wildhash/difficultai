@@ -42,7 +42,9 @@ def require_running_worker(*, root=ROOT, environ=None, runner=subprocess.run,
     except DeploymentError as error:
         raise ValueError(f"Owner-session gate blocked: {error}") from error
 
-    environment = dict(os.environ if environ is None else environ)
+    environment = dict(os.environ)
+    if environ is not None:
+        environment.update(environ)
     environment["DIFFICULTAI_BUILD_SHA"] = revision
 
     def run(arguments):

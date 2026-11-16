@@ -208,10 +208,11 @@ class TestOwnerSession(unittest.IsolatedAsyncioTestCase):
 class TestOwnerSessionCLI(unittest.TestCase):
     def test_worker_gate_requires_running_exact_revision_before_provider_io(self):
         runner = RecordingDocker()
-        revision = owner_session.require_running_worker(
-            root=Path("/fixture"), environ={}, runner=runner,
-            git_runner=RecordingGit(),
-        )
+        with patch.dict(owner_session.os.environ, {"PATH": "/bin", "HOME": "/home/test"}, clear=True):
+            revision = owner_session.require_running_worker(
+                root=Path("/fixture"), environ={"DOCKER_HOST": "fixture"}, runner=runner,
+                git_runner=RecordingGit(),
+            )
         self.assertEqual(revision, REVISION)
         self.assertEqual(len(runner.calls), 2)
         self.assertTrue(all(
@@ -222,6 +223,10 @@ class TestOwnerSessionCLI(unittest.TestCase):
         self.assertTrue(all(
             call[1]["env"]["DIFFICULTAI_BUILD_SHA"] == REVISION
             for call in runner.calls
+        ))
+        self.assertTrue(all(call[1]["env"]["PATH"] == "/bin" for call in runner.calls))
+        self.assertTrue(all(
+            call[1]["env"]["DOCKER_HOST"] == "fixture" for call in runner.calls
         ))
 
     def test_stopped_worker_blocks_before_provider_io(self):

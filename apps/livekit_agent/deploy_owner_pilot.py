@@ -75,6 +75,10 @@ def source_revision(root, git_runner):
     return value
 
 
+# Preserve the former private name for internal callers and older automation.
+_source_revision = source_revision
+
+
 def deploy(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.run):
     root = Path(root)
     if not (root / ".env").is_file():

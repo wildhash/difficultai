@@ -1340,8 +1340,13 @@ sanitized repair guidance.
 Verification: regressions must prove the gate orders status before exact-revision
 verification, carries the source revision into Compose interpolation, blocks a
 stopped or stale worker before provider I/O, and rejects a dirty checkout before
-Docker. The full Python suite, offline preflight, exact-head CI, and review must
-pass before merge.
+Docker. The first exact-head CI run exposed a stale readiness import of the
+renamed private revision helper that local test import order had masked. Move
+that caller to the public helper, retain the private alias for compatibility,
+and prove the readiness test passes alone. Preserve the host environment when
+adding test overrides so Docker discovery and host configuration still work.
+The full Python suite, offline preflight, exact-head CI, and review must pass
+before merge.
 
 Limitations: substituted Docker responses establish command ordering and
 fail-closed behavior locally; they do not deploy a worker or validate provider

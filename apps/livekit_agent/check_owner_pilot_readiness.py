@@ -8,7 +8,7 @@ import sys
 
 from dotenv import dotenv_values
 
-from apps.livekit_agent.deploy_owner_pilot import COMPOSE, DeploymentError, _source_revision
+from apps.livekit_agent.deploy_owner_pilot import COMPOSE, DeploymentError, source_revision
 from apps.livekit_agent.smoke_test import environment_issues
 
 
@@ -38,7 +38,7 @@ def check_readiness(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.r
 
     revision = None
     try:
-        revision = _source_revision(root, git_runner)
+        revision = source_revision(root, git_runner)
         checks.append(_check("source", "passed", "Checkout is clean and bound to a Git revision."))
     except (DeploymentError, OSError, subprocess.SubprocessError):
         checks.append(_check(
