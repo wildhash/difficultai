@@ -67,6 +67,16 @@ the scorecard again and compares its unprinted SHA-256 fingerprint. This proves
 that exact private file remained available across that replacement. Record owner
 acceptance separately as described in the README.
 
+Create a credentialed owner session only after the guarded deployment succeeds:
+
+```bash
+make owner-session SCENARIO=owner-scenario.json
+```
+
+The launcher fails before LiveKit I/O unless the checkout is clean and the
+running worker's embedded revision matches its exact commit. A stopped or stale
+worker must be repaired with `make owner-pilot-deploy` first.
+
 Rollback the worker without deleting evidence:
 
 ```bash

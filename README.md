@@ -291,6 +291,11 @@ and create the configured room plus a short-lived participant token with:
 make owner-session SCENARIO=owner-scenario.json
 ```
 
+Before contacting LiveKit, this command requires a clean Git checkout and a
+running Compose worker whose embedded revision exactly matches that checkout.
+Run `make owner-pilot-deploy` if the worker is stopped or stale. This prevents a
+short-lived room and bearer token from being created without the intended agent.
+
 Paste the emitted LiveKit URL, room name, and access token into the app. Keep the
 output local because it contains a bearer token. The launcher uses the current
 pinned LiveKit SDK and stores the scenario as room metadata for the worker.

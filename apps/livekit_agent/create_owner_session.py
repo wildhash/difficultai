@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 from urllib.parse import urlsplit
 import uuid
@@ -20,10 +21,68 @@ for location in (str(ROOT), str(MODULE_DIR)):
         sys.path.append(location)
 
 from scenario_validator import validate_scenario
+from apps.livekit_agent.deploy_owner_pilot import (
+    COMPOSE,
+    DeploymentError,
+    source_revision,
+)
 
 NAME = re.compile(r"[A-Za-z0-9_-]{1,128}")
 LIVEKIT_VARS = ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
 SESSION_BOOTSTRAP_TIMEOUT_SECONDS = 30
+WORKER_GATE_TIMEOUT_SECONDS = 30
+
+
+def require_running_worker(*, root=ROOT, environ=None, runner=subprocess.run,
+                           git_runner=subprocess.run) -> str:
+    """Require the deployed worker to match the current clean commit."""
+    root = Path(root)
+    try:
+        revision = source_revision(root, git_runner)
+    except DeploymentError as error:
+        raise ValueError(f"Owner-session gate blocked: {error}") from error
+
+    environment = dict(os.environ)
+    if environ is not None:
+        environment.update(environ)
+    environment["DIFFICULTAI_BUILD_SHA"] = revision
+
+    def run(arguments):
+        try:
+            return runner(
+                [*COMPOSE, *arguments], cwd=root, check=False,
+                capture_output=True, text=True, env=environment,
+                timeout=WORKER_GATE_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise ValueError(
+                "Owner-session gate timed out; inspect local Docker state before retrying"
+            ) from error
+        except OSError as error:
+            raise ValueError(
+                "Owner-session gate could not run; inspect local Docker state before retrying"
+            ) from error
+
+    status = run(("ps", "--status", "running", "--services"))
+    if status.returncode != 0:
+        raise ValueError(
+            "Owner-session gate could not inspect the worker; run make owner-pilot-deploy"
+        )
+    if "worker" not in status.stdout.splitlines():
+        raise ValueError(
+            "Owner-pilot worker is not running; run make owner-pilot-deploy before creating a session"
+        )
+
+    worker_revision = run((
+        "exec", "-T", "worker", "python", "-c",
+        "import os,sys; sys.exit(os.getenv('DIFFICULTAI_BUILD_SHA') != sys.argv[1])",
+        revision,
+    ))
+    if worker_revision.returncode != 0:
+        raise ValueError(
+            "Owner-pilot worker does not match the current commit; redeploy before creating a session"
+        )
+    return revision
 
 
 def load_configuration(root: Path, environ: dict) -> dict:
@@ -123,7 +182,8 @@ async def create_session(*, scenario: dict, room_name: str, identity: str,
     }
 
 
-def main(argv=None, *, root=ROOT, environ=None):
+def main(argv=None, *, root=ROOT, environ=None, runner=subprocess.run,
+         git_runner=subprocess.run, worker_gate=require_running_worker):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario-file", type=Path, required=True,
                         help="JSON copied from the DifficultAI scenario builder")
@@ -134,8 +194,13 @@ def main(argv=None, *, root=ROOT, environ=None):
 
     try:
         scenario = load_scenario(args.scenario_file)
+        process_environment = os.environ if environ is None else environ
+        worker_gate(
+            root=Path(root), environ=process_environment,
+            runner=runner, git_runner=git_runner,
+        )
         configured = load_configuration(
-            Path(root), os.environ if environ is None else environ
+            Path(root), process_environment
         )
         result = asyncio.run(create_session(
             scenario=scenario,

@@ -46,7 +46,7 @@ def _run(stage, arguments, *, root, runner, environment, capture_output=False):
     return result
 
 
-def _source_revision(root, git_runner):
+def source_revision(root, git_runner):
     try:
         revision = git_runner(
             ["git", "rev-parse", "--verify", "HEAD"], cwd=root, check=False,
@@ -75,12 +75,16 @@ def _source_revision(root, git_runner):
     return value
 
 
+# Preserve the former private name for internal callers and older automation.
+_source_revision = source_revision
+
+
 def deploy(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.run):
     root = Path(root)
     if not (root / ".env").is_file():
         raise DeploymentError(".env is missing; configure the four required credentials before deployment")
 
-    revision = _source_revision(root, git_runner)
+    revision = source_revision(root, git_runner)
     environment = os.environ.copy()
     environment["DIFFICULTAI_BUILD_SHA"] = revision
 

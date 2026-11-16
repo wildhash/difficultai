@@ -7,6 +7,7 @@ import io
 import json
 import jwt
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -32,6 +33,33 @@ SCENARIO = {
     "user_goal": "Verify a configured session",
     "difficulty": 0.6,
 }
+REVISION = "1" * 40
+
+
+class RecordingGit:
+    def __init__(self, *, dirty=False):
+        self.dirty = dirty
+
+    def __call__(self, command, **_kwargs):
+        stdout = REVISION + "\n" if "rev-parse" in command else (
+            " M private.py\n" if self.dirty else ""
+        )
+        return SimpleNamespace(returncode=0, stdout=stdout)
+
+
+class RecordingDocker:
+    def __init__(self, *, status="worker\n", revision_returncode=0):
+        self.status = status
+        self.revision_returncode = revision_returncode
+        self.calls = []
+
+    def __call__(self, command, **kwargs):
+        self.calls.append((tuple(command), kwargs))
+        is_status = command[-4:] == ["ps", "--status", "running", "--services"]
+        return SimpleNamespace(
+            returncode=0 if is_status else self.revision_returncode,
+            stdout=self.status if is_status else "",
+        )
 
 
 class TestOwnerSession(unittest.IsolatedAsyncioTestCase):
@@ -178,6 +206,89 @@ class TestOwnerSession(unittest.IsolatedAsyncioTestCase):
 
 
 class TestOwnerSessionCLI(unittest.TestCase):
+    def test_worker_gate_requires_running_exact_revision_before_provider_io(self):
+        runner = RecordingDocker()
+        with patch.dict(owner_session.os.environ, {"PATH": "/bin", "HOME": "/home/test"}, clear=True):
+            revision = owner_session.require_running_worker(
+                root=Path("/fixture"), environ={"DOCKER_HOST": "fixture"}, runner=runner,
+                git_runner=RecordingGit(),
+            )
+        self.assertEqual(revision, REVISION)
+        self.assertEqual(len(runner.calls), 2)
+        self.assertTrue(all(
+            call[1]["timeout"] == owner_session.WORKER_GATE_TIMEOUT_SECONDS
+            for call in runner.calls
+        ))
+        self.assertTrue(all(call[1]["capture_output"] for call in runner.calls))
+        self.assertTrue(all(
+            call[1]["env"]["DIFFICULTAI_BUILD_SHA"] == REVISION
+            for call in runner.calls
+        ))
+        self.assertTrue(all(call[1]["env"]["PATH"] == "/bin" for call in runner.calls))
+        self.assertTrue(all(
+            call[1]["env"]["DOCKER_HOST"] == "fixture" for call in runner.calls
+        ))
+
+    def test_stopped_worker_blocks_before_provider_io(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "scenario.json"
+            path.write_text(json.dumps(SCENARIO), encoding="utf-8")
+            create = AsyncMock()
+            with patch.object(owner_session, "create_session", new=create):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    code = owner_session.main(
+                        ["--scenario-file", str(path)], root=root, environ={},
+                        runner=RecordingDocker(status=""),
+                        git_runner=RecordingGit(),
+                    )
+        self.assertEqual(code, 1)
+        create.assert_not_awaited()
+        self.assertIn("not running", output.getvalue())
+
+    def test_stale_worker_blocks_before_provider_io(self):
+        runner = RecordingDocker(revision_returncode=1)
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            owner_session.require_running_worker(
+                root=Path("/fixture"), environ={}, runner=runner,
+                git_runner=RecordingGit(),
+            )
+
+    def test_dirty_checkout_blocks_before_docker(self):
+        runner = RecordingDocker()
+        with self.assertRaisesRegex(ValueError, "uncommitted"):
+            owner_session.require_running_worker(
+                root=Path("/fixture"), environ={}, runner=runner,
+                git_runner=RecordingGit(dirty=True),
+            )
+        self.assertEqual(runner.calls, [])
+
+    def test_docker_start_failure_is_sanitized(self):
+        def missing_docker(_command, **_kwargs):
+            raise FileNotFoundError("private host path")
+
+        with self.assertRaisesRegex(ValueError, "could not run") as caught:
+            owner_session.require_running_worker(
+                root=Path("/fixture"), environ={}, runner=missing_docker,
+                git_runner=RecordingGit(),
+            )
+        self.assertNotIn("private host path", str(caught.exception))
+
+    def test_docker_timeout_is_sanitized(self):
+        def stalled_docker(_command, **_kwargs):
+            raise subprocess.TimeoutExpired(
+                ["docker", "private-detail"], 30, stderr="secret"
+            )
+
+        with self.assertRaisesRegex(ValueError, "timed out") as caught:
+            owner_session.require_running_worker(
+                root=Path("/fixture"), environ={}, runner=stalled_docker,
+                git_runner=RecordingGit(),
+            )
+        self.assertNotIn("private-detail", str(caught.exception))
+        self.assertNotIn("secret", str(caught.exception))
+
     def test_project_env_is_loaded_without_exporting_credentials(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -205,7 +316,8 @@ class TestOwnerSessionCLI(unittest.TestCase):
                 output = io.StringIO()
                 with redirect_stdout(output):
                     code = owner_session.main(
-                        ["--scenario-file", str(path)], root=root, environ={}
+                        ["--scenario-file", str(path)], root=root, environ={},
+                        worker_gate=Mock(return_value=REVISION),
                     )
 
         self.assertEqual(code, 0)
@@ -244,7 +356,10 @@ class TestOwnerSessionCLI(unittest.TestCase):
                     new=AsyncMock(side_effect=RuntimeError("fixture-secret private-url")),
                 ):
                     with redirect_stdout(output):
-                        code = owner_session.main(["--scenario-file", str(path)])
+                        code = owner_session.main(
+                            ["--scenario-file", str(path)],
+                            worker_gate=Mock(return_value=REVISION),
+                        )
         self.assertEqual(code, 1)
         self.assertNotIn("fixture-secret", output.getvalue())
         self.assertNotIn("private-url", output.getvalue())
