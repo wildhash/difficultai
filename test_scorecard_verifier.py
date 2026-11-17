@@ -58,6 +58,28 @@ class TestScorecardVerifier(unittest.TestCase):
         self.assertEqual(report["checks"][-1]["name"], "scorecard_file")
         self.assertNotIn(str(self.directory), json.dumps(report))
 
+    def test_symlinked_scorecard_is_not_accepted_as_retained_evidence(self):
+        with tempfile.TemporaryDirectory() as outside:
+            external = Path(outside) / "external.json"
+            external.write_text(json.dumps(self.payload), encoding="utf-8")
+            source = self.directory / f"scorecard_{self.session_id}.json"
+            source.symlink_to(external)
+
+            report = verify_scorecard.verify_scorecard(self.directory, self.session_id)
+
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["checks"][-1]["name"], "scorecard_file")
+        self.assertNotIn(str(external), json.dumps(report))
+
+    def test_oversized_scorecard_is_rejected_before_json_parsing(self):
+        source = self.directory / f"scorecard_{self.session_id}.json"
+        source.write_bytes(b" " * (verify_scorecard.MAX_SCORECARD_BYTES + 1))
+
+        report = verify_scorecard.verify_scorecard(self.directory, self.session_id)
+
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["checks"][-1]["name"], "scorecard_file")
+
     def test_unbound_source_revision_is_rejected(self):
         self.payload["source_revision"] = "unverified"
         self.write()
