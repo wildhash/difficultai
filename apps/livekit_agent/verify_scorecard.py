@@ -6,6 +6,7 @@ import math
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 
 # Preserve the documented direct-script entrypoint without shadowing installed modules.
@@ -17,6 +18,33 @@ from difficultai.scorecard import SCORECARD_DIMENSIONS
 
 SESSION_ID = re.compile(r"[0-9a-f]{32}")
 SOURCE_REVISION = re.compile(r"[0-9a-f]{40}")
+MAX_SCORECARD_BYTES = 4 * 1024 * 1024
+
+
+def _read_scorecard(source: Path):
+    """Read one bounded regular file without following a final symlink."""
+    metadata = source.lstat()
+    if not stat.S_ISREG(metadata.st_mode):
+        raise ValueError("Scorecard must be a regular file")
+    if metadata.st_size > MAX_SCORECARD_BYTES:
+        raise ValueError("Scorecard exceeds the retained-evidence size limit")
+
+    descriptor = os.open(
+        source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode):
+            raise ValueError("Scorecard must be a regular file")
+        with os.fdopen(descriptor, "rb") as stream:
+            descriptor = None
+            contents = stream.read(MAX_SCORECARD_BYTES + 1)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    if len(contents) > MAX_SCORECARD_BYTES:
+        raise ValueError("Scorecard exceeds the retained-evidence size limit")
+    return json.loads(contents.decode("utf-8"))
 
 
 def verify_scorecard(directory: Path, session_id: str) -> dict:
@@ -33,8 +61,8 @@ def verify_scorecard(directory: Path, session_id: str) -> dict:
     record("session_id", True, "Session ID format is valid.")
     source = directory / f"scorecard_{session_id}.json"
     try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        payload = _read_scorecard(source)
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as error:
         record("scorecard_file", False, f"Scorecard could not be read ({type(error).__name__}).")
         return _report(session_id, checks)
 

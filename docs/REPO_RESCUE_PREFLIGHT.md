@@ -1361,3 +1361,45 @@ chain.
 Rollback: revert the owner-session gate, regressions, and documentation to
 restore unguarded room and token creation. No credential, provider request,
 session, worker, volume, or evidence is created by this repair itself.
+
+### 2026-11-17: require bounded regular scorecard evidence
+
+Baseline: `5a22d4a321942fa3f9c81ed0309f036f9c41cc94` (merged PR #43).
+Its exact-head application and worker-image jobs passed. DifficultAI, RepoMan,
+and make_my_day have no open PR or issue. The static pilot remains deployed;
+the credentialed worker, live session, retained real scorecard, and owner
+acceptance remain unverified here.
+
+Diagnosis: explicit scorecard verification followed a final symlink and read
+the entire target without a size limit. A substituted valid JSON file outside
+the retained evidence directory passed the verifier, weakening the evidence
+anchor used before replacement and owner acceptance. A malformed very large
+file could also consume unbounded memory.
+
+Alternatives: rely only on the existing latest-session discovery check, reject
+symlinks with `lstat`, copy scorecards before verification, or open a bounded
+regular file without following the final symlink. The bounded descriptor-based
+read is smallest and also closes the check/open race for the selected file.
+
+Decision: accept only a regular scorecard no larger than 4 MiB. Check both the
+path metadata and opened descriptor, use `O_NOFOLLOW` where available, and read
+at most one byte beyond the limit before JSON parsing. Keep all failure output
+sanitized.
+
+Verification: reproduce the former false pass with a valid external scorecard
+symlink, then require regressions for symlink and oversized-file rejection.
+Run the focused evidence suites, full Python suite, offline preflight, exact-head
+CI, and review before merge.
+
+Limitations: this validates local file type and size, not independent custody or
+the truth of transcript content. It does not deploy the worker, exercise live
+audio, create real evidence, establish owner acceptance, or prove customer
+activity, payment, or revenue.
+
+Next executable step: after merge, use clean main on the credentialed Docker
+host, run `make owner-pilot-ready`, deploy the worker, and complete one live
+owner session plus retained replacement and acceptance verification.
+
+Rollback: revert the bounded scorecard reader, tests, and documentation to
+restore the previous unbounded symlink-following verifier. This repair reads
+only test fixtures and creates no provider, deployment, or production state.
