@@ -21,13 +21,17 @@ SOURCE_REVISION = re.compile(r"[0-9a-f]{40}")
 MAX_SCORECARD_BYTES = 4 * 1024 * 1024
 
 
-def _read_scorecard(source: Path):
-    """Read one bounded regular file without following a final symlink."""
+class RetainedEvidenceError(ValueError):
+    """A sanitized retained-evidence file-policy failure."""
+
+
+def read_bounded_regular_json(source: Path, max_bytes: int, label: str):
+    """Read bounded JSON from one regular file without following a final symlink."""
     metadata = source.lstat()
     if not stat.S_ISREG(metadata.st_mode):
-        raise ValueError("Scorecard must be a regular file")
-    if metadata.st_size > MAX_SCORECARD_BYTES:
-        raise ValueError("Scorecard exceeds the retained-evidence size limit")
+        raise RetainedEvidenceError(f"{label} must be a regular file.")
+    if metadata.st_size > max_bytes:
+        raise RetainedEvidenceError(f"{label} exceeds the retained-evidence size limit.")
 
     descriptor = os.open(
         source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
@@ -35,15 +39,15 @@ def _read_scorecard(source: Path):
     try:
         opened = os.fstat(descriptor)
         if not stat.S_ISREG(opened.st_mode):
-            raise ValueError("Scorecard must be a regular file")
+            raise RetainedEvidenceError(f"{label} must be a regular file.")
         with os.fdopen(descriptor, "rb") as stream:
             descriptor = None
-            contents = stream.read(MAX_SCORECARD_BYTES + 1)
+            contents = stream.read(max_bytes + 1)
     finally:
         if descriptor is not None:
             os.close(descriptor)
-    if len(contents) > MAX_SCORECARD_BYTES:
-        raise ValueError("Scorecard exceeds the retained-evidence size limit")
+    if len(contents) > max_bytes:
+        raise RetainedEvidenceError(f"{label} exceeds the retained-evidence size limit.")
     return json.loads(contents.decode("utf-8"))
 
 
@@ -61,8 +65,10 @@ def verify_scorecard(directory: Path, session_id: str) -> dict:
     record("session_id", True, "Session ID format is valid.")
     source = directory / f"scorecard_{session_id}.json"
     try:
-        payload = _read_scorecard(source)
-    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as error:
+        payload = read_bounded_regular_json(
+            source, MAX_SCORECARD_BYTES, "Scorecard"
+        )
+    except (OSError, ValueError) as error:
         record("scorecard_file", False, f"Scorecard could not be read ({type(error).__name__}).")
         return _report(session_id, checks)
 

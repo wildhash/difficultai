@@ -261,9 +261,10 @@ The command verifies completion, two-way transcript structure, the six-score
 evaluation contract, the exact worker revision, and an unprinted private-file
 fingerprint before and after replacing only the worker. It then stores an
 immutable private replacement receipt on the persistent scorecard volume.
-The scorecard verifier accepts only regular files up to 4 MiB and rejects
-symlinks, so explicit status and acceptance commands cannot substitute an
-external file for retained evidence or read an unbounded scorecard.
+The evidence chain accepts only regular files and rejects symlinks. Scorecards
+are limited to 4 MiB; replacement receipts and owner attestations are limited
+to 64 KiB. Explicit status and acceptance commands therefore cannot substitute
+external files for retained evidence or read unbounded evidence artifacts.
 
 After personally judging the live audio, record the owner outcome without notes
 or transcript content:

@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from apps.livekit_agent.replacement_receipt import (
-    main, record_replacement, verify_replacement,
+    MAX_REPLACEMENT_BYTES, main, record_replacement, verify_replacement,
 )
 from difficultai.scorecard import SCORECARD_DIMENSIONS
 
@@ -68,6 +68,26 @@ class ReplacementReceiptTests(unittest.TestCase):
     def test_rejects_revision_mismatch(self):
         with self.assertRaisesRegex(ValueError, "did not match"):
             record_replacement(self.directory, SESSION_ID, "2" * 40)
+
+    def test_symlinked_replacement_is_not_accepted_as_retained_evidence(self):
+        record_replacement(self.directory, SESSION_ID, REVISION)
+        destination = self.directory / "replacement" / f"worker_replacement_{SESSION_ID}.json"
+        with tempfile.TemporaryDirectory() as outside:
+            external = Path(outside) / "external.json"
+            external.write_bytes(destination.read_bytes())
+            destination.unlink()
+            destination.symlink_to(external)
+
+            with self.assertRaisesRegex(ValueError, "valid worker replacement"):
+                verify_replacement(self.directory, SESSION_ID, REVISION)
+
+    def test_oversized_replacement_is_rejected_before_json_parsing(self):
+        record_replacement(self.directory, SESSION_ID, REVISION)
+        destination = self.directory / "replacement" / f"worker_replacement_{SESSION_ID}.json"
+        destination.write_bytes(b" " * (MAX_REPLACEMENT_BYTES + 1))
+
+        with self.assertRaisesRegex(ValueError, "valid worker replacement"):
+            verify_replacement(self.directory, SESSION_ID, REVISION)
 
     def test_exclusive_fallback_supports_volumes_without_hard_links(self):
         with patch("apps.livekit_agent.replacement_receipt.os.link",
