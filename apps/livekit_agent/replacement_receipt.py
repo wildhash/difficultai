@@ -14,10 +14,16 @@ ROOT = str(Path(__file__).resolve().parents[2])
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from apps.livekit_agent.verify_scorecard import SESSION_ID, SOURCE_REVISION, verify_scorecard
+from apps.livekit_agent.verify_scorecard import (
+    SESSION_ID,
+    SOURCE_REVISION,
+    read_bounded_regular_json,
+    verify_scorecard,
+)
 
 
 DIGEST = re.compile(r"[0-9a-f]{64}")
+MAX_REPLACEMENT_BYTES = 64 * 1024
 
 
 def _destination(directory: Path, session_id: str) -> Path:
@@ -102,8 +108,10 @@ def verify_replacement(directory: Path, session_id: str, source_revision: str) -
     """Verify that an immutable receipt still binds the current private scorecard."""
     destination = _destination(directory, session_id)
     try:
-        record = json.loads(destination.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        record = read_bounded_regular_json(
+            destination, MAX_REPLACEMENT_BYTES, "Worker replacement receipt"
+        )
+    except (OSError, ValueError) as error:
         raise ValueError("A valid worker replacement receipt is required before owner acceptance") from error
     expected = {
         "schema_version": 1,

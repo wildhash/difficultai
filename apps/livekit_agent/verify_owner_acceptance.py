@@ -12,7 +12,12 @@ if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from apps.livekit_agent.replacement_receipt import verify_replacement
-from apps.livekit_agent.verify_scorecard import SESSION_ID, verify_scorecard
+from apps.livekit_agent.verify_scorecard import (
+    SESSION_ID,
+    RetainedEvidenceError,
+    read_bounded_regular_json,
+    verify_scorecard,
+)
 
 
 MAX_ACCEPTANCE_BYTES = 64 * 1024
@@ -58,11 +63,13 @@ def verify_owner_acceptance(directory: Path, session_id: str) -> dict:
 
     source = directory / "acceptance" / f"owner_acceptance_{session_id}.json"
     try:
-        if source.stat().st_size > MAX_ACCEPTANCE_BYTES:
-            record("acceptance_file", False, "Owner acceptance exceeds the expected size.")
-            return _report(session_id, checks)
-        payload = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        payload = read_bounded_regular_json(
+            source, MAX_ACCEPTANCE_BYTES, "Owner acceptance"
+        )
+    except RetainedEvidenceError as error:
+        record("acceptance_file", False, str(error))
+        return _report(session_id, checks)
+    except (OSError, ValueError) as error:
         record("acceptance_file", False,
                f"Owner acceptance could not be read ({type(error).__name__}).")
         return _report(session_id, checks)

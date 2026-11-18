@@ -75,6 +75,19 @@ class OwnerAcceptanceVerifierTests(unittest.TestCase):
         self.assertEqual(report["checks"][-1]["name"], "acceptance_file")
         self.assertIn("exceeds", report["checks"][-1]["detail"])
 
+    def test_symlinked_acceptance_is_not_accepted_as_retained_evidence(self):
+        with tempfile.TemporaryDirectory() as outside:
+            external = Path(outside) / "external.json"
+            external.write_bytes(self.acceptance.read_bytes())
+            self.acceptance.unlink()
+            self.acceptance.symlink_to(external)
+
+            report = verify_owner_acceptance(self.directory, SESSION_ID)
+
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["checks"][-1]["name"], "acceptance_file")
+        self.assertNotIn(str(external), json.dumps(report))
+
     def test_identity_mismatch_does_not_report_decision(self):
         payload = json.loads(self.acceptance.read_text())
         payload["session_id"] = "b" * 32

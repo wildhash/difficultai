@@ -1403,3 +1403,42 @@ owner session plus retained replacement and acceptance verification.
 Rollback: revert the bounded scorecard reader, tests, and documentation to
 restore the previous unbounded symlink-following verifier. This repair reads
 only test fixtures and creates no provider, deployment, or production state.
+
+### 2026-11-18: apply regular-file custody to the full evidence chain
+
+Baseline: `5da08d7fcb64f12215a78ba8bbe616f4671a4ed7` (merged PR #44).
+Its exact-head application and worker-image jobs passed. DifficultAI, RepoMan,
+and make_my_day have no open PR or issue. No checked-in evidence shows a new
+credentialed worker deployment or real owner session.
+
+Diagnosis: the scorecard now has a bounded regular-file gate, but replacement
+and owner-acceptance verifiers still followed final symlinks. Moving each valid
+artifact outside the private evidence directory and substituting a symlink left
+both replacement and complete acceptance verification at `passed`.
+
+Alternatives: rely on the scorecard as the only custody anchor, duplicate file
+checks in both verifiers, embed all evidence in one file, or reuse the bounded
+descriptor reader across the chain. Reuse is the smallest consistent change
+and preserves the existing artifact schemas and workflow.
+
+Decision: expose the bounded regular-JSON reader, retain the 4 MiB scorecard
+limit, and apply a 64 KiB limit plus regular-file and no-final-symlink checks to
+replacement receipts and owner attestations. Keep failure reports path-free.
+
+Verification: reproduce the former false passes for external replacement and
+acceptance symlinks. Add regressions for both symlinks and an oversized
+replacement receipt, then run focused evidence tests, the full Python suite,
+offline preflight, exact-head CI, and review before merge.
+
+Limitations: regular-file custody is local evidence hygiene, not independent
+attestation or proof that transcript content is true. This change does not
+deploy the worker, exercise live audio, create real evidence, establish owner
+acceptance, or prove customer activity, payment, or revenue.
+
+Next executable step: after merge, use clean main on the credentialed Docker
+host, run `make owner-pilot-ready`, deploy the worker, and complete one live
+owner session plus retained replacement and acceptance verification.
+
+Rollback: revert the shared reader and replacement/acceptance integrations,
+their regressions, and documentation. The repair changes only verifier behavior
+and creates no provider, deployment, or production state.
