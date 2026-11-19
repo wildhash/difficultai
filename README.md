@@ -265,6 +265,9 @@ The evidence chain accepts only regular files and rejects symlinks. Scorecards
 are limited to 4 MiB; replacement receipts and owner attestations are limited
 to 64 KiB. Explicit status and acceptance commands therefore cannot substitute
 external files for retained evidence or read unbounded evidence artifacts.
+When the worker creates `SCORECARD_DIR`, it uses mode `0700`; atomic scorecard
+files use mode `0600`. An existing persistent volume keeps its operator-managed
+permissions, which the deployment preflight must validate.
 
 After personally judging the live audio, record the owner outcome without notes
 or transcript content:

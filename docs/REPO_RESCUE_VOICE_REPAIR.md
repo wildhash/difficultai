@@ -27,6 +27,9 @@ tests passed without exercising these runtime paths.
   and job shutdown. Provider failures are raised and stored as failed sessions.
 - Write a unique, atomic scorecard file per session. Room names are retained
   as data and never used in filenames; repeated names cannot overwrite results.
+  Newly created scorecard storage is private to the worker (`0700`), and each
+  atomic scorecard is private (`0600`). Existing operator-provisioned directory
+  permissions are preserved.
 - Keep optional Opik tracing disabled until its destination is configured.
 - Add a credential-free Python CI job and document explicit `VOICE_MODE`
   selection. Automatic provider failover is not implemented.
