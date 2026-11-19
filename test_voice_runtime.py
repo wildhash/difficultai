@@ -3,6 +3,7 @@
 import os
 import json
 from pathlib import Path
+import stat
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -142,6 +143,26 @@ class TestVoiceLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(files), 2)
         self.assertNotEqual(json.loads(files[0].read_text())["session_id"], json.loads(files[1].read_text())["session_id"])
         self.assertFalse(list(Path(self.directory.name).glob("*.tmp")))
+
+    async def test_new_scorecard_directory_is_private_by_default(self):
+        with tempfile.TemporaryDirectory() as parent:
+            directory = Path(parent) / "scorecards"
+            with patch.dict(os.environ, {"SCORECARD_DIR": str(directory)}):
+                previous_umask = os.umask(0o022)
+                try:
+                    worker = DifficultAIAgent(self.make_context())
+                    with patch.object(
+                        worker,
+                        "_create_realtime_assistant",
+                        AsyncMock(return_value=self.fake_transport()),
+                    ):
+                        await worker.entrypoint()
+                finally:
+                    os.umask(previous_umask)
+
+            scorecard = next(directory.glob("*.json"))
+            self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE(scorecard.stat().st_mode), 0o600)
 
     async def test_room_metadata_is_used_when_dispatch_metadata_is_empty(self):
         ctx = self.make_context()

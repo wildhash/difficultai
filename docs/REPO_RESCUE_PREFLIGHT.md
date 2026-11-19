@@ -1442,3 +1442,42 @@ owner session plus retained replacement and acceptance verification.
 Rollback: revert the shared reader and replacement/acceptance integrations,
 their regressions, and documentation. The repair changes only verifier behavior
 and creates no provider, deployment, or production state.
+
+### 2026-11-19: make new scorecard storage private by default
+
+Baseline: `acf707179767db0023dd77b9e4b31209a3751e17` (merged PR #45).
+Its exact-head application and worker-image jobs passed. DifficultAI, RepoMan,
+and make_my_day have no open PR or issue. No checked-in evidence shows a new
+credentialed worker deployment, real owner session, or operational acceptance.
+
+Diagnosis: under a normal `022` host umask, the worker created a missing
+`SCORECARD_DIR` with mode `0755`. Atomic scorecard files were already `0600`,
+so their contents stayed unreadable, but another host user could enumerate
+session identifiers and evidence filenames in newly created local storage.
+
+Alternatives: rely on file permissions alone, chmod every existing persistent
+volume, or make only newly created storage private. Changing every existing
+volume could override deliberate operator ownership and shared-container access.
+
+Decision: create a missing scorecard directory with mode `0700`, preserve
+operator-managed permissions when it already exists, and retain atomic `0600`
+scorecard publication.
+
+Verification: reproduce `0755` creation with an explicit `022` umask, then add
+a lifecycle regression requiring `0700` directory and `0600` scorecard modes.
+Run the focused regression, full Python suite, offline preflight, exact-head CI,
+and review before merge.
+
+Limitations: this protects newly created POSIX storage; it does not repair an
+existing volume's permissions or provide independent custody. It does not
+deploy the worker, exercise live audio, create real evidence, establish owner
+acceptance, or prove customer activity, payment, or revenue.
+
+Next executable step: after merge, use clean main on the credentialed Docker
+host, validate the existing volume with `make owner-pilot-ready`, deploy the
+worker, and complete one live owner session plus retained replacement and
+acceptance verification.
+
+Rollback: revert the directory mode, regression, and documentation to restore
+umask-derived creation. The repair creates only temporary test evidence and no
+provider, deployment, or production state.

@@ -495,7 +495,7 @@ DIFFICULTY LEVEL {difficulty:.2f} (0-1 scale):
         
         # One unique, atomic file per session; room names never become paths.
         directory = Path(os.getenv("SCORECARD_DIR", "scorecards"))
-        directory.mkdir(parents=True, exist_ok=True)
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         scorecard_file = directory / f"scorecard_{self.session_id}.json"
         raw_revision = os.getenv("DIFFICULTAI_BUILD_SHA", "").strip().lower()
         source_revision = raw_revision if SOURCE_REVISION.fullmatch(raw_revision) else "unverified"
