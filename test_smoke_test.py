@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -216,6 +217,14 @@ class TestPreflight(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(report["status"], "failed")
         self.assertIn("SCORECARD_DIR", report["next_action"])
         self.assertNotIn("private-path", json.dumps(report))
+
+    def test_storage_rejects_group_or_world_access(self):
+        os.chmod(self.directory.name, 0o755)
+        with self.assertRaises(PermissionError):
+            smoke_test.check_storage(Path(self.directory.name))
+        self.assertEqual(
+            stat.S_IMODE(Path(self.directory.name).stat().st_mode), 0o755
+        )
 
     async def test_each_run_retains_a_distinct_readable_report(self):
         directory = Path(self.directory.name)

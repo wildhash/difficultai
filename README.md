@@ -267,7 +267,9 @@ to 64 KiB. Explicit status and acceptance commands therefore cannot substitute
 external files for retained evidence or read unbounded evidence artifacts.
 When the worker creates `SCORECARD_DIR`, it uses mode `0700`; atomic scorecard
 files use mode `0600`. An existing persistent volume keeps its operator-managed
-permissions, which the deployment preflight must validate.
+permissions. New Compose volumes are seeded as `0700`, and the deployment
+preflight rejects group- or world-accessible existing storage without changing
+it automatically.
 
 After personally judging the live audio, record the owner outcome without notes
 or transcript content:

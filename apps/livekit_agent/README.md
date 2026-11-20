@@ -177,6 +177,10 @@ Records include the room, job, transcript, heuristic evaluation, and a
 the default directory is ignored by Git. Configure a persistent volume for
 retention across worker/container replacement. This file store does not provide
 authenticated customer retrieval or managed backups.
+The image seeds new scorecard volumes as owner-only (`0700`). Connectivity and
+offline preflights fail if an existing `SCORECARD_DIR` grants any group or world
+access; they report only the exception type and never change operator-managed
+permissions automatically.
 
 For a replacement-durability check, run `make owner-pilot-latest` after the
 session. It safely discovers the newest regular scorecard in the deployed volume

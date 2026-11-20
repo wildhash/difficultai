@@ -1481,3 +1481,46 @@ acceptance verification.
 Rollback: revert the directory mode, regression, and documentation to restore
 umask-derived creation. The repair creates only temporary test evidence and no
 provider, deployment, or production state.
+
+### 2026-11-20: enforce private storage on the Compose deployment path
+
+Baseline: `757db64e6cd3530e17d06e831bbcae8382e9a2c3` (merged PR #46).
+Its exact-head application and worker-image jobs passed. DifficultAI, RepoMan,
+and make_my_day have no open PR or issue. No checked-in evidence shows a new
+credentialed worker deployment, real owner session, or operational acceptance.
+
+Diagnosis: the worker now creates a missing scorecard directory as `0700`, but
+the production image already created `/data/scorecards` with the image-builder
+default mode. Under the normal `022` umask that directory was `0755`, and Docker
+could seed a fresh named volume from it before the worker ran. The storage
+preflight tested write/read durability but accepted an existing `0755` volume.
+
+Alternatives: chmod every mounted volume at worker startup, rely only on each
+scorecard's `0600` mode, or seed new volumes privately and reject permissive
+existing storage. Automatic chmod could override deliberate operator ownership
+and shared-container access, so the last option is the smallest safe change.
+
+Decision: seed `/data/scorecards` as owner-only `0700` in the image. Make the
+storage preflight create missing local storage as `0700` and fail if an existing
+directory grants any group or world permission. Do not print its path or alter
+existing permissions.
+
+Verification: reproduce both false passes: the Dockerfile lacked a private
+directory contract, and `check_storage` accepted a `0755` directory. Add
+regressions for both, then run the focused tests, full Python suite, offline
+preflight, exact-head application and worker-image CI, and review before merge.
+
+Limitations: POSIX mode checks do not inspect ACLs or independently attest host
+custody. An older permissive volume requires an operator to inspect ownership
+and correct its mode before deployment. This does not deploy the worker, contact
+providers, exercise live audio, create real evidence, establish owner acceptance,
+or prove customer activity, payment, or revenue.
+
+Next executable step: after merge, use clean main on the credentialed Docker
+host and run `make owner-pilot-deploy`. If the preflight reports storage failure,
+inspect the named volume and set the intended scorecard directory to `0700`,
+then rerun and complete one live owner evidence and acceptance chain.
+
+Rollback: revert the image mode, preflight permission gate, regressions, and
+documentation. This restores permissive-volume acceptance without changing or
+deleting any existing volume, provider, deployment, or production state.

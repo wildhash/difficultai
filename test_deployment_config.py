@@ -20,6 +20,10 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn('CMD ["python", "-m", "apps.livekit_agent", "start"]', normalized)
         self.assertIn("SCORECARD_DIR=/data/scorecards", normalized)
         self.assertIn("DIFFICULTAI_BUILD_SHA", normalized)
+        self.assertIn(
+            "install -d -m 0700 -o difficultai -g difficultai /data/scorecards",
+            normalized,
+        )
 
     def test_owner_pilot_mount_matches_scorecard_directory(self):
         path = ROOT / "compose.owner-pilot.yml"

@@ -12,8 +12,7 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --create-home --uid 10001 difficultai \
-    && mkdir -p /data/scorecards \
-    && chown difficultai:difficultai /data/scorecards
+    && install -d -m 0700 -o difficultai -g difficultai /data/scorecards
 
 COPY --chown=difficultai:difficultai . .
 

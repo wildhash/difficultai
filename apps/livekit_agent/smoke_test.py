@@ -11,6 +11,7 @@ import json
 import math
 import os
 from pathlib import Path
+import stat
 import sys
 import tempfile
 from urllib.parse import urlsplit
@@ -77,7 +78,10 @@ def check_components():
 
 
 def check_storage(directory):
-    directory.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    permissions = stat.S_IMODE(directory.stat().st_mode)
+    if permissions & (stat.S_IRWXG | stat.S_IRWXO):
+        raise PermissionError("Scorecard storage permits group or world access")
     probe = None
     try:
         with tempfile.NamedTemporaryFile(dir=directory, prefix=".preflight-", delete=False) as file:
@@ -124,8 +128,8 @@ async def run_checks(*, offline=False):
         ("components", check_components, "SDK imports, scenario, and fixture scorecard passed.",
          "Install requirements.txt and repair the local component failure."),
         ("storage", lambda: check_storage(Path(os.getenv("SCORECARD_DIR", "scorecards"))),
-         "Temporary file write/read passed; replacement durability remains unverified.",
-         "Configure a writable SCORECARD_DIR on persistent storage."),
+         "Owner-only storage and temporary file write/read passed; replacement durability remains unverified.",
+         "Configure a private, writable SCORECARD_DIR on persistent storage."),
     ):
         try:
             check()
