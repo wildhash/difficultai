@@ -1524,3 +1524,45 @@ then rerun and complete one live owner evidence and acceptance chain.
 Rollback: revert the image mode, preflight permission gate, regressions, and
 documentation. This restores permissive-volume acceptance without changing or
 deleting any existing volume, provider, deployment, or production state.
+
+### 2026-11-21: stop before provider I/O when local deployment gates fail
+
+Baseline: `87cf17aa6c9392943c82cd640929517349a61073` (merged PR #47).
+Its exact-head application and worker-image jobs passed. DifficultAI, RepoMan,
+and make_my_day have no open PR or issue. No checked-in evidence shows a new
+credentialed worker deployment, real owner session, or operational acceptance.
+
+Diagnosis: the connectivity preflight recorded a local component or private
+storage failure but continued to authenticated LiveKit room listing and an
+OpenAI Realtime handshake whenever credential shapes were valid. A deployment
+that could not start therefore still contacted both providers and obscured the
+ordering of its first actionable blocker.
+
+Alternatives: keep collecting every independent diagnostic, gate only OpenAI,
+or stop all provider checks after either local prerequisite fails. The strict
+local gate is smallest, matches the deployment's fail-closed ordering, and
+avoids service activity that cannot lead to a deployable worker.
+
+Decision: after component and storage checks, mark configuration and both
+provider checks `not_run` when either local check failed. Preserve the first
+sanitized local next action and make no LiveKit or OpenAI request.
+
+Verification: reproduce a storage `PermissionError` while substituting both
+provider checks and prove each was previously awaited. Require the regression
+to show neither is awaited and configuration is `not_run`, then run the focused
+tests, full Python suite, offline preflight, exact-head CI, and review before
+merge.
+
+Limitations: substituted provider functions prove control flow, not credential
+validity or external billing behavior. This does not deploy the worker, exercise
+live audio, create real evidence, establish owner acceptance, or prove customer
+activity, payment, or revenue.
+
+Next executable step: after merge, use clean main on the credentialed Docker
+host and run `make owner-pilot-deploy`. Correct the first sanitized local blocker
+if one appears; only a locally ready worker will proceed to provider checks and
+then the live owner evidence and acceptance chain.
+
+Rollback: revert the local-gate branch, regression, and documentation to resume
+provider connectivity checks despite local failure. The repair itself creates
+only temporary fixtures and no provider, deployment, or production state.

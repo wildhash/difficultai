@@ -211,12 +211,18 @@ class TestPreflight(unittest.IsolatedAsyncioTestCase):
 
     async def test_storage_failure_is_not_hidden_by_connectivity_success(self):
         with patch.object(smoke_test, "check_storage", side_effect=PermissionError("private-path")):
-            with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock):
-                with patch.object(smoke_test, "check_openai", new_callable=AsyncMock):
+            with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock) as livekit:
+                with patch.object(smoke_test, "check_openai", new_callable=AsyncMock) as openai:
                     report = await smoke_test.run_checks()
         self.assertEqual(report["status"], "failed")
         self.assertIn("SCORECARD_DIR", report["next_action"])
         self.assertNotIn("private-path", json.dumps(report))
+        livekit.assert_not_awaited()
+        openai.assert_not_awaited()
+        self.assertEqual(
+            next(c for c in report["checks"] if c["name"] == "configuration")["status"],
+            "not_run",
+        )
 
     def test_storage_rejects_group_or_world_access(self):
         os.chmod(self.directory.name, 0o755)

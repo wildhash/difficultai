@@ -231,6 +231,9 @@ join a room, exchange audio, or verify model generation. `make preflight-offline
 checks local components and storage without credentials. Each run retains a JSON
 report under `$SCORECARD_DIR/preflight` with outcomes and the next action. See
 [preflight evidence and acceptance steps](docs/REPO_RESCUE_PREFLIGHT.md).
+If local components or private scorecard storage fail, the connectivity
+preflight makes no LiveKit or OpenAI request and reports those provider checks
+as not run.
 
 After a real owner session, recover its 32-character session ID and next safe
 step from the private Compose volume:

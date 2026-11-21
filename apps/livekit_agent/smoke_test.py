@@ -138,10 +138,15 @@ async def run_checks(*, offline=False):
             # Provider exceptions can contain URLs, tokens, or keys. Record only the type.
             record(name, "failed", f"Check raised {type(error).__name__}.", action)
 
+    local_failed = any(check["status"] == "failed" for check in checks)
     if offline:
         record("configuration", "not_run", "Offline mode does not check credentials.")
         record("livekit_connectivity", "not_run", "Offline mode makes no service requests.")
         record("openai_connectivity", "not_run", "Offline mode makes no service requests.")
+    elif local_failed:
+        record("configuration", "not_run", "Local components and private storage must pass first.")
+        record("livekit_connectivity", "not_run", "Local preflight must pass before service requests.")
+        record("openai_connectivity", "not_run", "Local preflight must pass before service requests.")
     else:
         try:
             issues = environment_issues(os.environ)
