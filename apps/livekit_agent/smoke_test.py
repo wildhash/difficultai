@@ -168,12 +168,15 @@ async def run_checks(*, offline=False):
             except Exception as error:
                 record("livekit_connectivity", "failed", f"Request raised {type(error).__name__}.",
                        "Check LiveKit credentials, network access, and server availability; rerun.")
-            try:
-                await check_openai(os.environ)
-                record("openai_connectivity", "passed", "Authenticated OpenAI Realtime handshake succeeded without sending content.")
-            except Exception as error:
-                record("openai_connectivity", "failed", f"Request raised {type(error).__name__}.",
-                       "Check the OpenAI credential, network access, and account availability; rerun.")
+                record("openai_connectivity", "not_run",
+                       "LiveKit connectivity must pass before the OpenAI request.")
+            else:
+                try:
+                    await check_openai(os.environ)
+                    record("openai_connectivity", "passed", "Authenticated OpenAI Realtime handshake succeeded without sending content.")
+                except Exception as error:
+                    record("openai_connectivity", "failed", f"Request raised {type(error).__name__}.",
+                           "Check the OpenAI credential, network access, and account availability; rerun.")
 
     failed = [check for check in checks if check["status"] == "failed"]
     return {

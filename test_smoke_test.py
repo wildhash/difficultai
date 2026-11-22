@@ -56,19 +56,22 @@ class TestPreflight(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(clients), 1)
         self.assertTrue(clients[0]._session.closed)
 
-    async def test_failed_request_closes_client_and_does_not_leak_provider_detail(self):
+    async def test_livekit_failure_closes_client_and_stops_before_openai(self):
         from livekit import api
         client = SimpleNamespace(room=SimpleNamespace(list_rooms=AsyncMock(
             side_effect=RuntimeError("fixture-secret fixture-openai-key"),
         )))
         manager = Mock(__aenter__=AsyncMock(return_value=client), __aexit__=AsyncMock(return_value=False))
         with patch.object(api, "LiveKitAPI", return_value=manager):
-            with patch.object(smoke_test, "check_openai", new_callable=AsyncMock):
+            with patch.object(smoke_test, "check_openai", new_callable=AsyncMock) as openai:
                 report = await smoke_test.run_checks()
         manager.__aexit__.assert_awaited_once()
+        openai.assert_not_awaited()
         self.assertEqual(report["status"], "failed")
         livekit = next(c for c in report["checks"] if c["name"] == "livekit_connectivity")
         self.assertEqual(livekit["status"], "failed")
+        openai_check = next(c for c in report["checks"] if c["name"] == "openai_connectivity")
+        self.assertEqual(openai_check["status"], "not_run")
         self.assertNotIn("fixture-secret", json.dumps(report))
         self.assertNotIn("fixture-openai-key", json.dumps(report))
         self.assertIn("LiveKit credentials", report["next_action"])

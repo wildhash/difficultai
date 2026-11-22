@@ -1566,3 +1566,44 @@ then the live owner evidence and acceptance chain.
 Rollback: revert the local-gate branch, regression, and documentation to resume
 provider connectivity checks despite local failure. The repair itself creates
 only temporary fixtures and no provider, deployment, or production state.
+
+### 2026-11-22: stop provider checks at the first connectivity blocker
+
+Baseline: `b5631884eed683405e3f0ee9ea0b11b9dcdde7be` (merged PR #48).
+Its exact-head application and worker-image jobs passed. DifficultAI, RepoMan,
+and make_my_day have no open PR or issue. No checked-in evidence shows a new
+credentialed worker deployment, real owner session, or operational acceptance.
+
+Diagnosis: after local and configuration gates passed, a failed authenticated
+LiveKit room listing still led to an OpenAI Realtime handshake. A substituted
+LiveKit failure reproduced one call to each provider and a misleading passed
+OpenAI result even though the worker could not deploy.
+
+Alternatives: keep collecting independent provider diagnostics, run the checks
+in parallel, or require the deployment's first provider dependency before the
+second. Independent diagnostics may be useful interactively, but they create
+avoidable provider activity after a decisive deployment blocker.
+
+Decision: preserve the existing order and make it strict. When LiveKit fails,
+record its sanitized failure and mark OpenAI `not_run`; check OpenAI only after
+LiveKit passes. This keeps the first actionable next step and avoids a request
+that cannot lead to deployment.
+
+Verification: require the LiveKit-failure regression to prove the client closes,
+the OpenAI function is not awaited, secrets remain absent, and the OpenAI check
+is `not_run`. Run the focused test, full Python suite, offline preflight,
+exact-head CI, and review before merge.
+
+Limitations: substituted provider functions prove control flow, not credential
+validity, billing behavior, or provider availability. This does not deploy the
+worker, exercise live audio, create real evidence, establish owner acceptance,
+or prove customer activity, payment, or revenue.
+
+Next executable step: after merge, use clean main on the credentialed Docker
+host and run `make owner-pilot-deploy`. Resolve the first sanitized provider
+blocker; only both passing connectivity checks should allow worker startup and
+the live owner evidence and acceptance chain.
+
+Rollback: revert the strict provider-order branch, regression, and documentation
+to resume the OpenAI check after LiveKit failure. The repair itself creates only
+temporary fixtures and no provider, deployment, or production state.
