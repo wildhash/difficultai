@@ -233,7 +233,8 @@ report under `$SCORECARD_DIR/preflight` with outcomes and the next action. See
 [preflight evidence and acceptance steps](docs/REPO_RESCUE_PREFLIGHT.md).
 If local components or private scorecard storage fail, the connectivity
 preflight makes no LiveKit or OpenAI request and reports those provider checks
-as not run.
+as not run. LiveKit connectivity is then checked first; if it fails, the
+OpenAI request is also reported as not run because deployment cannot proceed.
 
 After a real owner session, recover its 32-character session ID and next safe
 step from the private Compose volume:

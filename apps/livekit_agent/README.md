@@ -221,6 +221,10 @@ Docker Engine with Compose, and a renderable owner-pilot configuration. A
 passing readiness report does not validate credential values or claim a
 deployment.
 
+The credentialed preflight checks LiveKit before OpenAI. If LiveKit access
+fails, it reports the OpenAI check as not run rather than making an unnecessary
+Realtime request for a worker that cannot deploy.
+
 `make owner-pilot-deploy` must run from a clean Git checkout. It binds the
 image and worker environment to the exact 40-character commit SHA and verifies
 that identity after startup. Each new scorecard records that public source
