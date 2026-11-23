@@ -1607,3 +1607,46 @@ the live owner evidence and acceptance chain.
 Rollback: revert the strict provider-order branch, regression, and documentation
 to resume the OpenAI check after LiveKit failure. The repair itself creates only
 temporary fixtures and no provider, deployment, or production state.
+
+### 2026-11-23: bound source-integrity inspection before deployment
+
+Baseline: `39d1ce1119eba2f3d3ca56c4046068a6b3b3f87d` (merged PR #49).
+Its exact-head application and worker-image jobs passed. DifficultAI, RepoMan,
+and make_my_day have no open PR or issue. No checked-in evidence shows a new
+credentialed worker deployment, real owner session, or operational acceptance.
+
+Diagnosis: every Docker and provider deployment stage had a deadline, but the
+Git revision and dirty-check subprocesses did not. A stalled local repository
+therefore left readiness, deployment, and owner-session entrypoints waiting
+indefinitely before their already bounded Docker and provider gates. A direct
+probe confirmed both Git calls lacked a timeout.
+
+Alternatives: rely on an external shell deadline, apply one deadline to the
+entire command, or bound each source inspection. Per-call limits preserve the
+existing stage-specific model and identify whether revision or checkout
+inspection stalled without exposing Git output or a private host path.
+
+Decision: allow 30 seconds each for `git rev-parse` and `git status`. Convert a
+timeout into a sanitized `DeploymentError`; do not proceed to Docker, provider
+I/O, or worker state changes. The shared source gate also protects readiness and
+owner-session commands.
+
+Verification: reproduce two successful Git calls with no timeout, then require
+the regression to prove a timed-out revision probe is bounded, sanitized, and
+stops before Docker. Require the successful deployment path to show both source
+calls carry the deadline. Run focused deployment, readiness, and owner-session
+tests, the full Python suite, offline preflight, exact-head CI, and review.
+
+Limitations: substituted subprocesses prove control flow, not the health of the
+owner's Git checkout or Docker host. This does not deploy the worker, contact
+providers, exercise live audio, create real evidence, establish owner acceptance,
+or prove customer activity, payment, or revenue.
+
+Next executable step: after merge, update clean main on the credentialed Docker
+host and run `make owner-pilot-ready`, then `make owner-pilot-deploy`. Correct
+the first sanitized local or provider blocker before the live owner evidence and
+acceptance chain.
+
+Rollback: revert the source-inspection deadlines, regression, and documentation
+to restore unbounded Git waits. The repair itself reads only substituted/local
+source state and creates no provider, deployment, or production state.

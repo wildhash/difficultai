@@ -6,7 +6,9 @@ import subprocess
 import tempfile
 import unittest
 
-from apps.livekit_agent.deploy_owner_pilot import COMPOSE, DeploymentError, deploy
+from apps.livekit_agent.deploy_owner_pilot import (
+    COMPOSE, SOURCE_INSPECTION_TIMEOUT, DeploymentError, deploy,
+)
 
 
 REVISION = "1" * 40
@@ -29,14 +31,19 @@ class RecordingRunner:
 
 
 class RecordingGit:
-    def __init__(self, *, revision=REVISION, dirty=False, error=False):
+    def __init__(self, *, revision=REVISION, dirty=False, error=False, timeout=False):
         self.revision = revision
         self.dirty = dirty
         self.error = error
+        self.timeout = timeout
         self.calls = []
 
     def __call__(self, command, **kwargs):
         self.calls.append((tuple(command), kwargs))
+        if self.timeout:
+            if "timeout" not in kwargs:
+                raise AssertionError("git runner invoked without a timeout keyword")
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
         if self.error:
             raise FileNotFoundError("private host path")
         stdout = self.revision + "\n" if "rev-parse" in command else (" M private.py\n" if self.dirty else "")
@@ -80,7 +87,8 @@ class OwnerPilotDeployTests(unittest.TestCase):
     def test_success_orders_gate_before_start_and_checks_status(self):
         self.configure()
         runner = RecordingRunner()
-        deploy(root=self.root, runner=runner, git_runner=RecordingGit())
+        git = RecordingGit()
+        deploy(root=self.root, runner=runner, git_runner=git)
         arguments = [call[0][len(COMPOSE):] for call in runner.calls]
         self.assertEqual(arguments, [
             ("config", "--quiet"),
@@ -95,6 +103,22 @@ class OwnerPilotDeployTests(unittest.TestCase):
         ])
         self.assertTrue(all(call[1]["env"]["DIFFICULTAI_BUILD_SHA"] == REVISION for call in runner.calls))
         self.assertTrue(all(call[1]["timeout"] > 0 for call in runner.calls))
+        self.assertEqual(len(git.calls), 2)
+        self.assertTrue(all(
+            call[1]["timeout"] == SOURCE_INSPECTION_TIMEOUT for call in git.calls
+        ))
+
+    def test_source_inspection_is_bounded_and_timeout_is_sanitized(self):
+        self.configure()
+        runner = RecordingRunner()
+        git = RecordingGit(timeout=True)
+        with self.assertRaisesRegex(DeploymentError, "source revision inspection timed out") as caught:
+            deploy(root=self.root, runner=runner, git_runner=git)
+        self.assertNotIn(str(self.root), str(caught.exception))
+        self.assertEqual(
+            git.calls[0][1]["timeout"], SOURCE_INSPECTION_TIMEOUT
+        )
+        self.assertEqual(runner.calls, [])
 
     def test_dirty_checkout_stops_before_docker(self):
         self.configure()

@@ -11,6 +11,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = ("docker", "compose", "--file", "compose.owner-pilot.yml")
 REVISION = re.compile(r"[0-9a-f]{40}")
+SOURCE_INSPECTION_TIMEOUT = 30
 STAGE_TIMEOUTS = {
     "Compose validation": 30,
     "Worker image build": 20 * 60,
@@ -50,8 +51,12 @@ def source_revision(root, git_runner):
     try:
         revision = git_runner(
             ["git", "rev-parse", "--verify", "HEAD"], cwd=root, check=False,
-            capture_output=True, text=True,
+            capture_output=True, text=True, timeout=SOURCE_INSPECTION_TIMEOUT,
         )
+    except subprocess.TimeoutExpired as error:
+        raise DeploymentError(
+            "the source revision inspection timed out; inspect local Git state before retrying"
+        ) from error
     except OSError as error:
         raise DeploymentError(
             "the source revision could not be identified; deploy from a Git commit"
@@ -62,8 +67,12 @@ def source_revision(root, git_runner):
     try:
         status = git_runner(
             ["git", "status", "--porcelain"], cwd=root, check=False,
-            capture_output=True, text=True,
+            capture_output=True, text=True, timeout=SOURCE_INSPECTION_TIMEOUT,
         )
+    except subprocess.TimeoutExpired as error:
+        raise DeploymentError(
+            "the source checkout inspection timed out; deployment was not started"
+        ) from error
     except OSError as error:
         raise DeploymentError(
             "the source checkout could not be inspected; deployment was not started"

@@ -219,7 +219,8 @@ provider request and reports only missing or invalid configuration names. It
 requires a clean Git revision, the four credential names in `.env`, a reachable
 Docker Engine with Compose, and a renderable owner-pilot configuration. A
 passing readiness report does not validate credential values or claim a
-deployment.
+deployment. Git revision and dirty-check inspection are each bounded to 30
+seconds and fail with a sanitized local-state blocker.
 
 The credentialed preflight checks LiveKit before OpenAI. If LiveKit access
 fails, it reports the OpenAI check as not run rather than making an unnecessary
