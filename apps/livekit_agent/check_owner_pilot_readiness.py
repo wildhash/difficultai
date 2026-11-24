@@ -6,10 +6,9 @@ from pathlib import Path
 import subprocess
 import sys
 
-from dotenv import dotenv_values
-
-from apps.livekit_agent.deploy_owner_pilot import COMPOSE, DeploymentError, source_revision
-from apps.livekit_agent.smoke_test import environment_issues
+from apps.livekit_agent.deploy_owner_pilot import (
+    COMPOSE, DeploymentError, configuration_issues, source_revision,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -46,18 +45,8 @@ def check_readiness(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.r
             "Use a clean checkout of the intended commit.",
         ))
 
-    env_path = root / ".env"
     configured = dict(environ if environ is not None else os.environ)
-    if env_path.is_file():
-        try:
-            file_values = {key: value or "" for key, value in dotenv_values(env_path).items()}
-            # Match Docker Compose: process values override the project .env file.
-            configured = {**file_values, **configured}
-            issues = environment_issues(configured)
-        except (OSError, ValueError):
-            issues = [".env"]
-    else:
-        issues = [".env"]
+    issues = configuration_issues(root, configured)
 
     if issues:
         checks.append(_check(

@@ -1650,3 +1650,50 @@ acceptance chain.
 Rollback: revert the source-inspection deadlines, regression, and documentation
 to restore unbounded Git waits. The repair itself reads only substituted/local
 source state and creates no provider, deployment, or production state.
+
+### 2026-11-24: reject invalid configuration before image build
+
+Baseline: `81e10c1b881b20530e160a6a889693e3e4c7a944` (merged PR #50).
+Its exact-head application and worker-image jobs passed. DifficultAI, RepoMan,
+and make_my_day have no open PR or issue. No checked-in evidence shows a new
+credentialed worker deployment, real owner session, or operational acceptance.
+
+Diagnosis: `owner-pilot-ready` checked all four configuration names and the
+LiveKit URL shape, but direct `owner-pilot-deploy` checked only that `.env`
+existed. A fixture containing only `LIVEKIT_URL` reached image build and worker
+start under substituted successful Docker responses. On a real host it would
+build the image before the later credentialed preflight rejected configuration.
+
+Alternatives: require operators to remember the readiness command, validate
+inside Compose after the build, or reuse the readiness parser at the deployment
+boundary. Reusing the parser is smallest, keeps Docker Compose environment
+precedence, and prevents avoidable build and provider work.
+
+Decision: share one `.env` plus process-environment validator between readiness
+and deployment. Before Git inspection or Docker, reject missing or invalid
+configuration and report only affected names. Do not print values or claim that
+shape validation proves credential validity.
+
+Verification: reproduce the incomplete `.env` reaching build and startup, then
+require the regression to show no Git or Docker call and no private value in the
+error. Preserve readiness environment precedence. Run focused deployment,
+readiness, and owner-session tests, the full Python suite, offline preflight,
+exact-head CI, and review.
+
+Local verification passed 36 focused tests and all 183 Python tests. The first
+full-suite attempt hit the documented optional SOCKS transport requirement in
+this refreshed proxy environment; installing `httpx[socks]` locally resolved it
+without changing project dependencies. Offline preflight and compilation passed.
+
+Limitations: configuration shape checks do not authenticate either provider or
+validate account access. This does not build or deploy the worker, contact
+providers, exercise live audio, create real evidence, establish owner acceptance,
+or prove customer activity, payment, or revenue.
+
+Next executable step: after merge, update clean main on the credentialed Docker
+host and run `make owner-pilot-ready`, then `make owner-pilot-deploy`. Both
+providers must pass before worker startup and the live owner evidence chain.
+
+Rollback: revert the shared configuration gate, regression, and documentation
+to restore build-before-configuration-failure behavior. The repair reads only
+local names and creates no provider, deployment, or production state.
