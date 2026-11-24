@@ -69,7 +69,7 @@ class OwnerPilotDeployTests(unittest.TestCase):
 
     def test_missing_env_stops_before_docker(self):
         runner = RecordingRunner()
-        with self.assertRaisesRegex(DeploymentError, "configuration"):
+        with self.assertRaisesRegex(DeploymentError, "create a complete .env"):
             deploy(root=self.root, runner=runner, git_runner=RecordingGit())
         self.assertEqual(runner.calls, [])
 

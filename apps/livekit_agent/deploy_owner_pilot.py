@@ -110,6 +110,10 @@ def deploy(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.run,
     process_environment = dict(os.environ if environ is None else environ)
     issues = configuration_issues(root, process_environment)
     if issues:
+        if issues == [".env"]:
+            raise DeploymentError(
+                "configuration is missing or invalid: .env; create a complete .env before deployment"
+            )
         raise DeploymentError(
             "configuration is missing or invalid: " + ", ".join(issues)
             + "; correct only the listed names before deployment"
