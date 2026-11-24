@@ -12,6 +12,12 @@ from apps.livekit_agent.deploy_owner_pilot import (
 
 
 REVISION = "1" * 40
+CONFIGURATION = """\
+LIVEKIT_URL=wss://fixture.livekit.cloud
+LIVEKIT_API_KEY=fixture-key
+LIVEKIT_API_SECRET=fixture-secret
+OPENAI_API_KEY=fixture-openai
+"""
 
 
 class RecordingRunner:
@@ -59,12 +65,27 @@ class OwnerPilotDeployTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def configure(self):
-        (self.root / ".env").write_text("private values stay local\n", encoding="utf-8")
+        (self.root / ".env").write_text(CONFIGURATION, encoding="utf-8")
 
     def test_missing_env_stops_before_docker(self):
         runner = RecordingRunner()
-        with self.assertRaisesRegex(DeploymentError, "credentials"):
+        with self.assertRaisesRegex(DeploymentError, "create a complete .env"):
             deploy(root=self.root, runner=runner, git_runner=RecordingGit())
+        self.assertEqual(runner.calls, [])
+
+    def test_invalid_configuration_stops_before_source_and_build(self):
+        (self.root / ".env").write_text(
+            CONFIGURATION.replace("OPENAI_API_KEY=fixture-openai\n", ""),
+            encoding="utf-8",
+        )
+        runner = RecordingRunner()
+        git = RecordingGit()
+        with self.assertRaisesRegex(DeploymentError, "OPENAI_API_KEY") as caught:
+            deploy(
+                root=self.root, runner=runner, git_runner=git, environ={},
+            )
+        self.assertNotIn("fixture-secret", str(caught.exception))
+        self.assertEqual(git.calls, [])
         self.assertEqual(runner.calls, [])
 
     def test_connectivity_failure_never_starts_worker(self):

@@ -222,6 +222,11 @@ passing readiness report does not validate credential values or claim a
 deployment. Git revision and dirty-check inspection are each bounded to 30
 seconds and fail with a sanitized local-state blocker.
 
+`make owner-pilot-deploy` repeats the same credential-name and URL-shape gate
+before Git inspection or image build. Missing or invalid configuration reports
+only the affected names; credential values remain private and provider access
+is still tested later by the credentialed preflight.
+
 The credentialed preflight checks LiveKit before OpenAI. If LiveKit access
 fails, it reports the OpenAI check as not run rather than making an unnecessary
 Realtime request for a worker that cannot deploy.

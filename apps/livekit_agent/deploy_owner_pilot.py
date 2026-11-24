@@ -7,6 +7,10 @@ import re
 import subprocess
 import sys
 
+from dotenv import dotenv_values
+
+from apps.livekit_agent.smoke_test import environment_issues
+
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = ("docker", "compose", "--file", "compose.owner-pilot.yml")
@@ -88,13 +92,35 @@ def source_revision(root, git_runner):
 _source_revision = source_revision
 
 
-def deploy(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.run):
+def configuration_issues(root, environ):
+    """Return only invalid configuration names using Docker Compose precedence."""
+    path = Path(root) / ".env"
+    if not path.is_file():
+        return [".env"]
+    try:
+        file_values = {key: value or "" for key, value in dotenv_values(path).items()}
+        return environment_issues({**file_values, **dict(environ)})
+    except (OSError, UnicodeError, ValueError):
+        return [".env"]
+
+
+def deploy(*, root=ROOT, runner=subprocess.run, git_runner=subprocess.run,
+           environ=None):
     root = Path(root)
-    if not (root / ".env").is_file():
-        raise DeploymentError(".env is missing; configure the four required credentials before deployment")
+    process_environment = dict(os.environ if environ is None else environ)
+    issues = configuration_issues(root, process_environment)
+    if issues:
+        if issues == [".env"]:
+            raise DeploymentError(
+                "configuration is missing or invalid: .env; create a complete .env before deployment"
+            )
+        raise DeploymentError(
+            "configuration is missing or invalid: " + ", ".join(issues)
+            + "; correct only the listed names before deployment"
+        )
 
     revision = source_revision(root, git_runner)
-    environment = os.environ.copy()
+    environment = process_environment.copy()
     environment["DIFFICULTAI_BUILD_SHA"] = revision
 
     _run("Compose validation", ("config", "--quiet"), root=root, runner=runner,
