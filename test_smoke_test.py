@@ -21,6 +21,7 @@ ENVIRONMENT = {
     "LIVEKIT_API_KEY": "fixture-key",
     "LIVEKIT_API_SECRET": "fixture-secret",
     "OPENAI_API_KEY": "fixture-openai-key",
+    "DIFFICULTAI_BUILD_SHA": "1" * 40,
     "PYTHON_DOTENV_DISABLED": "1",
 }
 
@@ -132,9 +133,18 @@ class TestPreflight(unittest.IsolatedAsyncioTestCase):
                 openai.assert_awaited_once()
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["mode"], "connectivity")
+        self.assertEqual(report["source_revision"], "1" * 40)
         openai = next(c for c in report["checks"] if c["name"] == "openai_connectivity")
         self.assertEqual(openai["status"], "passed")
         self.assertIn("owner voice session", report["next_action"])
+
+    async def test_invalid_source_revision_is_not_retained_or_disclosed(self):
+        with patch.dict(os.environ, {"DIFFICULTAI_BUILD_SHA": "private-value"}):
+            with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock):
+                with patch.object(smoke_test, "check_openai", new_callable=AsyncMock):
+                    report = await smoke_test.run_checks()
+        self.assertIsNone(report["source_revision"])
+        self.assertNotIn("private-value", json.dumps(report))
 
     async def test_openai_failure_is_sanitized_and_blocks_deployment(self):
         with patch.object(smoke_test, "check_livekit", new_callable=AsyncMock):
