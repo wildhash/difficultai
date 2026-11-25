@@ -11,6 +11,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import stat
 import sys
 import tempfile
@@ -21,6 +22,7 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 REQUIRED_VARS = ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "OPENAI_API_KEY")
+SOURCE_REVISION = re.compile(r"[0-9a-f]{40}")
 UNVERIFIED = [
     "Two-way live audio, interruption handling, and transcript delivery",
     "Real-session scorecard and retention across worker replacement",
@@ -179,10 +181,13 @@ async def run_checks(*, offline=False):
                            "Check the OpenAI credential, network access, and account availability; rerun.")
 
     failed = [check for check in checks if check["status"] == "failed"]
+    raw_revision = os.getenv("DIFFICULTAI_BUILD_SHA", "").strip().lower()
+    source_revision = raw_revision if SOURCE_REVISION.fullmatch(raw_revision) else None
     return {
         "schema_version": 1,
         "run_id": uuid.uuid4().hex,
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "source_revision": source_revision,
         "mode": "offline" if offline else "connectivity",
         "status": "failed" if failed else "passed",
         "checks": checks,

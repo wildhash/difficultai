@@ -1697,3 +1697,41 @@ providers must pass before worker startup and the live owner evidence chain.
 Rollback: revert the shared configuration gate, regression, and documentation
 to restore build-before-configuration-failure behavior. The repair reads only
 local names and creates no provider, deployment, or production state.
+
+### 2026-11-25: bind retained preflight evidence to the deployed source
+
+Baseline: `0b19fb6df56a64e501343433f0abd88403a738ea` (merged PR #51).
+Its exact-head application and worker-image jobs passed. DifficultAI, RepoMan,
+and make_my_day have no open PR or issue. No checked-in evidence shows a new
+credentialed worker deployment, real owner session, or operational acceptance.
+
+Diagnosis: deployment supplies `DIFFICULTAI_BUILD_SHA` to the credentialed
+preflight container, but the retained preflight JSON omitted it. A successful
+provider check therefore could not later be tied to the worker revision, while
+session, replacement, and acceptance evidence already require that identity.
+
+Alternatives: infer the revision from a report timestamp, add Git to the runtime
+image, or retain the exact revision already injected by the fail-closed deployer.
+Timestamps are ambiguous and runtime Git would add an unnecessary dependency.
+
+Decision: add a nullable `source_revision` report field. Retain only a normalized
+40-character lowercase Git SHA; invalid or absent values become JSON `null` and
+are never echoed. Direct deployment already injects the validated current SHA,
+while standalone preflight remains usable and visibly unbound when it lacks one.
+
+Verification: reproduce a deployment-shaped preflight report with an injected
+SHA and prove the report omits it. Add regressions for exact binding and secret-
+shaped invalid input, then run the focused tests, full Python suite, offline
+preflight, exact-head CI, and review before merge.
+
+Limitations: source binding does not authenticate providers, deploy the worker,
+exercise live audio, prove replacement durability, establish owner acceptance,
+or prove customer activity, payment, or revenue.
+
+Next executable step: after merge, update clean main on the credentialed Docker
+host and run `make owner-pilot-deploy`. Confirm the retained credentialed
+preflight report and running worker carry the same revision before completing
+the live owner evidence and acceptance chain.
+
+Rollback: revert the report field, regressions, and this record. Existing reports
+remain unchanged; the repair creates no provider, deployment, or production state.
