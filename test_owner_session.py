@@ -204,6 +204,23 @@ class TestOwnerSession(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ValueError, "failed validation"):
                 owner_session.load_scenario(path)
 
+    def test_load_scenario_rejects_symlink_and_oversized_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            external = root / "external.json"
+            external.write_text(json.dumps(SCENARIO), encoding="utf-8")
+            linked = root / "scenario.json"
+            linked.symlink_to(external)
+            with self.assertRaisesRegex(ValueError, "regular file"):
+                owner_session.load_scenario(linked)
+
+            linked.unlink()
+            linked.write_bytes(
+                b"{}" + b" " * (owner_session.MAX_SCENARIO_BYTES + 1)
+            )
+            with self.assertRaisesRegex(ValueError, "size limit"):
+                owner_session.load_scenario(linked)
+
 
 class TestOwnerSessionCLI(unittest.TestCase):
     def test_worker_gate_requires_running_exact_revision_before_provider_io(self):

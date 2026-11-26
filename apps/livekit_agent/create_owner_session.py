@@ -26,11 +26,13 @@ from apps.livekit_agent.deploy_owner_pilot import (
     DeploymentError,
     source_revision,
 )
+from apps.livekit_agent.verify_scorecard import read_bounded_regular_json
 
 NAME = re.compile(r"[A-Za-z0-9_-]{1,128}")
 LIVEKIT_VARS = ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
 SESSION_BOOTSTRAP_TIMEOUT_SECONDS = 30
 WORKER_GATE_TIMEOUT_SECONDS = 30
+MAX_SCENARIO_BYTES = 64 * 1024
 
 
 def require_running_worker(*, root=ROOT, environ=None, runner=subprocess.run,
@@ -99,7 +101,7 @@ def load_configuration(root: Path, environ: dict) -> dict:
 
 
 def load_scenario(path: Path) -> dict:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = read_bounded_regular_json(path, MAX_SCENARIO_BYTES, "Scenario")
     if not isinstance(payload, dict):
         raise ValueError("Scenario must be a JSON object")
     errors = validate_scenario(payload)

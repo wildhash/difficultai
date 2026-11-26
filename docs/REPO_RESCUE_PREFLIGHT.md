@@ -1735,3 +1735,41 @@ the live owner evidence and acceptance chain.
 
 Rollback: revert the report field, regressions, and this record. Existing reports
 remain unchanged; the repair creates no provider, deployment, or production state.
+
+### 2026-11-26: bound owner-session scenario input
+
+Baseline: `86eed44eca254b5b20573ddef05c4451b8f25f07` (merged PR #52).
+Its exact-head application and worker-image jobs passed. DifficultAI, RepoMan,
+and make_my_day have no open PR or issue. No checked-in evidence shows a new
+credentialed worker deployment, real owner session, or operational acceptance.
+
+Diagnosis: `owner-session` followed a final scenario-file symlink and read its
+entire target before checking the deployed worker. A direct fixture proved that
+a symlink to an external valid scenario was accepted. A large regular file could
+also consume unbounded memory before the already bounded Docker and provider gates.
+
+Alternatives: trust operator-supplied paths, copy inputs into the repository, or
+reuse the proven bounded regular-JSON reader. Copying can retain private scenario
+content in the checkout; trusting the path leaves an avoidable unbounded step.
+
+Decision: require a regular scenario file, reject final symlinks, and cap reads
+at 64 KiB before JSON and scenario validation. Reuse descriptor-based no-follow
+handling so a path swap cannot bypass the final-file check. Do not print content
+or paths in the failure report.
+
+Verification: preserve the symlink reproduction, add an oversized-file
+regression, and retain the existing valid, non-object, and incomplete scenario
+coverage. Run focused owner-session tests, the full Python suite, offline
+preflight, exact-head CI, and review before merge.
+
+Limitations: local fixtures prove file-policy behavior, not a running worker,
+provider access, live audio, replacement durability, owner acceptance, customer
+activity, payment, or revenue.
+
+Next executable step: after merge, update clean main on the credentialed Docker
+host, deploy the worker, and provide one private regular scenario JSON file no
+larger than 64 KiB to `make owner-session SCENARIO=<path>`.
+
+Rollback: revert the scenario reader, regression, and this record to restore
+unbounded symlink-following input. The repair reads fixtures only and creates no
+provider, deployment, or production state.
