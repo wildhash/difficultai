@@ -49,6 +49,7 @@ class VerifyPreflightTests(unittest.TestCase):
             report(mode="offline"),
             report(status="failed"),
             report(revision="2" * 40),
+            {**report(), "schema_version": 2},
         ):
             with self.subTest(payload=payload):
                 self.write(payload)

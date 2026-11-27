@@ -10,7 +10,7 @@ import sys
 
 ROOT = str(Path(__file__).resolve().parents[2])
 if ROOT not in sys.path:
-    sys.path.append(ROOT)
+    sys.path.insert(0, ROOT)
 
 from apps.livekit_agent.verify_scorecard import (
     SOURCE_REVISION,
@@ -62,6 +62,7 @@ def verify_latest_preflight(directory: Path, revision: str) -> dict:
     ]
     valid = (
         isinstance(checks, list)
+        and payload.get("schema_version") == 1
         and len(checks) == len(REQUIRED_CHECKS)
         and payload.get("mode") == "connectivity"
         and payload.get("status") == "passed"
