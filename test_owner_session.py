@@ -48,16 +48,23 @@ class RecordingGit:
 
 
 class RecordingDocker:
-    def __init__(self, *, status="worker\n", revision_returncode=0):
+    def __init__(self, *, status="worker\n", revision_returncode=0,
+                 preflight_returncode=0):
         self.status = status
         self.revision_returncode = revision_returncode
+        self.preflight_returncode = preflight_returncode
         self.calls = []
 
     def __call__(self, command, **kwargs):
         self.calls.append((tuple(command), kwargs))
         is_status = command[-4:] == ["ps", "--status", "running", "--services"]
+        is_preflight = "apps.livekit_agent.verify_preflight" in command
         return SimpleNamespace(
-            returncode=0 if is_status else self.revision_returncode,
+            returncode=(
+                0 if is_status else
+                self.preflight_returncode if is_preflight else
+                self.revision_returncode
+            ),
             stdout=self.status if is_status else "",
         )
 
@@ -231,7 +238,7 @@ class TestOwnerSessionCLI(unittest.TestCase):
                 git_runner=RecordingGit(),
             )
         self.assertEqual(revision, REVISION)
-        self.assertEqual(len(runner.calls), 2)
+        self.assertEqual(len(runner.calls), 3)
         self.assertTrue(all(
             call[1]["timeout"] == owner_session.WORKER_GATE_TIMEOUT_SECONDS
             for call in runner.calls
@@ -245,6 +252,9 @@ class TestOwnerSessionCLI(unittest.TestCase):
         self.assertTrue(all(
             call[1]["env"]["DOCKER_HOST"] == "fixture" for call in runner.calls
         ))
+        self.assertIn(
+            "apps.livekit_agent.verify_preflight", runner.calls[2][0]
+        )
 
     def test_stopped_worker_blocks_before_provider_io(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -271,6 +281,15 @@ class TestOwnerSessionCLI(unittest.TestCase):
                 root=Path("/fixture"), environ={}, runner=runner,
                 git_runner=RecordingGit(),
             )
+
+    def test_worker_without_matching_preflight_blocks_before_provider_io(self):
+        runner = RecordingDocker(preflight_returncode=1)
+        with self.assertRaisesRegex(ValueError, "credentialed preflight"):
+            owner_session.require_running_worker(
+                root=Path("/fixture"), environ={}, runner=runner,
+                git_runner=RecordingGit(),
+            )
+        self.assertEqual(len(runner.calls), 3)
 
     def test_dirty_checkout_blocks_before_docker(self):
         runner = RecordingDocker()
