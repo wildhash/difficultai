@@ -1773,3 +1773,44 @@ larger than 64 KiB to `make owner-session SCENARIO=<path>`.
 Rollback: revert the scenario reader, regression, and this record to restore
 unbounded symlink-following input. The repair reads fixtures only and creates no
 provider, deployment, or production state.
+
+### 2026-11-27: require source-bound deployment preflight before owner sessions
+
+Baseline: `6fc8665b6172441c416ad7edb6b11d647044c9ce` (merged PR #53).
+Its exact-head application and worker-image jobs passed. DifficultAI, RepoMan,
+and make_my_day have no open PR or issue. No checked-in evidence shows a new
+credentialed worker deployment, real owner session, or operational acceptance.
+
+Diagnosis: the owner-session gate required a running worker at the current clean
+commit, but did not require the retained credentialed preflight introduced in
+the deployment path. A substituted manually started worker passed after only
+status and revision checks, allowing LiveKit room creation without evidence that
+both provider checks passed for that build.
+
+Alternatives: trust the image revision, rerun provider checks for every session,
+or verify the newest retained preflight. Revision alone proves identity, while a
+new provider handshake would add repeated external activity and still discard
+the deployment evidence chain.
+
+Decision: add a privacy-safe verifier for the newest regular preflight report.
+Require connectivity mode, overall success, all five prerequisite checks passed,
+and the exact running source revision. The owner-session gate executes it inside
+the worker against the mounted scorecard volume. Offline, stale, failed,
+symlinked, malformed, oversized, or wrong-revision evidence fails closed.
+
+Verification: reproduce the two-check bypass, add verifier regressions and a
+worker-gate regression requiring the third check, then run focused tests, the
+full Python suite, offline preflight, exact-head CI, and review before merge.
+
+Limitations: retained preflight proves historical connectivity, not current
+provider availability. This does not deploy the worker, exercise live audio,
+prove replacement durability, establish owner acceptance, customer activity,
+payment, or revenue.
+
+Next executable step: after merge, update clean main on the credentialed Docker
+host and run `make owner-pilot-deploy`. Only that source-bound passed preflight
+should permit `make owner-session SCENARIO=<private-regular-json>`.
+
+Rollback: revert the verifier, third worker gate, regressions, and this record to
+restore revision-only owner-session authorization. Existing reports and volumes
+remain unchanged.

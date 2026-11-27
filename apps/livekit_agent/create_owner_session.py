@@ -84,6 +84,14 @@ def require_running_worker(*, root=ROOT, environ=None, runner=subprocess.run,
         raise ValueError(
             "Owner-pilot worker does not match the current commit; redeploy before creating a session"
         )
+    preflight = run((
+        "exec", "-T", "worker", "python", "-m",
+        "apps.livekit_agent.verify_preflight", revision,
+    ))
+    if preflight.returncode != 0:
+        raise ValueError(
+            "Owner-pilot worker lacks a matching passed credentialed preflight; redeploy before creating a session"
+        )
     return revision
 
 
