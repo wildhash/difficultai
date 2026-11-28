@@ -1814,3 +1814,43 @@ should permit `make owner-session SCENARIO=<private-regular-json>`.
 Rollback: revert the verifier, third worker gate, regressions, and this record to
 restore revision-only owner-session authorization. Existing reports and volumes
 remain unchanged.
+
+### 2026-11-28: bound owner-pilot configuration input
+
+Baseline: `605716834bff8c0a0a36b3db42f4fb2e97a2d342` (merged PR #54).
+Its exact-head application and worker-image jobs passed. DifficultAI, RepoMan,
+and make_my_day have no open PR or issue. No checked-in evidence shows a new
+credentialed worker deployment, real owner session, or operational acceptance.
+
+Diagnosis: readiness and deployment followed a final `.env` symlink and allowed
+python-dotenv to read its entire target before Git, Docker, or provider gates.
+Owner-session configuration repeated the same unbounded behavior. A fixture
+proved that a symlink to an external complete configuration passed validation.
+
+Alternatives: permit secret-manager symlinks, rely on repository custody, or
+require one bounded regular project file while retaining exported-variable
+overrides. Symlinks obscure which file is deployed, and unbounded special or
+large files can stall the fail-closed gate.
+
+Decision: centralize `.env` reads behind a 64 KiB regular-file limit, reject
+final symlinks, and verify the opened descriptor before parsing. Read at most one
+extra byte, decode UTF-8, then pass an in-memory stream to python-dotenv. Exported
+variables retain Docker Compose precedence and no values enter error output.
+
+Verification: preserve the symlink reproduction and add oversized-file
+regressions for direct deployment and owner-session configuration. Require both
+to stop before Git, Docker, or provider I/O, then run focused tests, the full
+Python suite, offline preflight, exact-head CI, and review before merge.
+
+Limitations: file shape and custody checks do not authenticate credentials or
+prove account access. This does not deploy the worker, exercise live audio,
+prove replacement durability, establish owner acceptance, customer activity,
+payment, or revenue.
+
+Next executable step: after merge, place credentials in one private regular
+`.env` no larger than 64 KiB on the Docker host, update clean main, and run
+`make owner-pilot-deploy` before the owner session.
+
+Rollback: revert the bounded reader, shared integrations, regressions, and this
+record to restore unbounded symlink-following configuration. No credentials or
+runtime state are changed by this repair.

@@ -1,9 +1,11 @@
 """Fail-closed deployment gate for the owner-pilot Compose worker."""
 
 import argparse
+import io
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 
@@ -16,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = ("docker", "compose", "--file", "compose.owner-pilot.yml")
 REVISION = re.compile(r"[0-9a-f]{40}")
 SOURCE_INSPECTION_TIMEOUT = 30
+MAX_CONFIGURATION_BYTES = 64 * 1024
 STAGE_TIMEOUTS = {
     "Compose validation": 30,
     "Worker image build": 20 * 60,
@@ -92,13 +95,37 @@ def source_revision(root, git_runner):
 _source_revision = source_revision
 
 
+def read_configuration_file(path):
+    """Read bounded dotenv data from one regular file without following a symlink."""
+    path = Path(path)
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > MAX_CONFIGURATION_BYTES:
+        raise ValueError("Configuration file is not a bounded regular file")
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode):
+            raise ValueError("Configuration file is not a regular file")
+        with os.fdopen(descriptor, "rb") as stream:
+            descriptor = None
+            contents = stream.read(MAX_CONFIGURATION_BYTES + 1)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    if len(contents) > MAX_CONFIGURATION_BYTES:
+        raise ValueError("Configuration file exceeds the size limit")
+    text = contents.decode("utf-8")
+    return {
+        key: value or ""
+        for key, value in dotenv_values(stream=io.StringIO(text)).items()
+    }
+
+
 def configuration_issues(root, environ):
     """Return only invalid configuration names using Docker Compose precedence."""
     path = Path(root) / ".env"
-    if not path.is_file():
-        return [".env"]
     try:
-        file_values = {key: value or "" for key, value in dotenv_values(path).items()}
+        file_values = read_configuration_file(path)
         return environment_issues({**file_values, **dict(environ)})
     except (OSError, UnicodeError, ValueError):
         return [".env"]
