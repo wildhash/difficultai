@@ -12,8 +12,6 @@ import sys
 from urllib.parse import urlsplit
 import uuid
 
-from dotenv import dotenv_values
-
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_DIR = Path(__file__).resolve().parent
 for location in (str(ROOT), str(MODULE_DIR)):
@@ -24,6 +22,7 @@ from scenario_validator import validate_scenario
 from apps.livekit_agent.deploy_owner_pilot import (
     COMPOSE,
     DeploymentError,
+    read_configuration_file,
     source_revision,
 )
 from apps.livekit_agent.verify_scorecard import read_bounded_regular_json
@@ -99,11 +98,12 @@ def load_configuration(root: Path, environ: dict) -> dict:
     """Load the documented project .env without mutating the process environment."""
     configured = {}
     path = root / ".env"
-    if path.is_file():
-        try:
-            configured = {key: value or "" for key, value in dotenv_values(path).items()}
-        except (OSError, UnicodeError, ValueError) as error:
-            raise ValueError("Project .env could not be read") from error
+    try:
+        configured = read_configuration_file(path)
+    except FileNotFoundError:
+        pass
+    except (OSError, UnicodeError, ValueError) as error:
+        raise ValueError("Project .env could not be read") from error
     # Match Docker Compose and the readiness gate: exported values win.
     return {**configured, **dict(environ)}
 

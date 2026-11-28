@@ -380,6 +380,23 @@ class TestOwnerSessionCLI(unittest.TestCase):
         self.assertEqual(configured["LIVEKIT_URL"], "wss://exported.livekit.cloud")
         self.assertEqual(configured["LIVEKIT_API_KEY"], "exported-key")
 
+    def test_configuration_rejects_symlink_and_oversized_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            external = root / "external-secrets"
+            external.write_text(
+                "LIVEKIT_URL=wss://fixture.livekit.cloud\n", encoding="utf-8"
+            )
+            path = root / ".env"
+            path.symlink_to(external)
+            with self.assertRaisesRegex(ValueError, "could not be read"):
+                owner_session.load_configuration(root, {})
+
+            path.unlink()
+            path.write_bytes(b"#" * (64 * 1024 + 1))
+            with self.assertRaisesRegex(ValueError, "could not be read"):
+                owner_session.load_configuration(root, {})
+
     def test_provider_failure_does_not_print_credentials_or_provider_detail(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "scenario.json"

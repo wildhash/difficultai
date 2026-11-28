@@ -73,6 +73,29 @@ class OwnerPilotDeployTests(unittest.TestCase):
             deploy(root=self.root, runner=runner, git_runner=RecordingGit())
         self.assertEqual(runner.calls, [])
 
+    def test_unbounded_or_symlinked_env_stops_before_docker(self):
+        external = self.root / "external-secrets"
+        external.write_text(CONFIGURATION, encoding="utf-8")
+        path = self.root / ".env"
+        path.symlink_to(external)
+        runner = RecordingRunner()
+        with self.assertRaisesRegex(DeploymentError, "complete .env"):
+            deploy(
+                root=self.root, runner=runner,
+                git_runner=RecordingGit(), environ={},
+            )
+        self.assertEqual(runner.calls, [])
+
+        path.unlink()
+        path.write_bytes(CONFIGURATION.encode() + b"#" * (64 * 1024))
+        runner = RecordingRunner()
+        with self.assertRaisesRegex(DeploymentError, "complete .env"):
+            deploy(
+                root=self.root, runner=runner,
+                git_runner=RecordingGit(), environ={},
+            )
+        self.assertEqual(runner.calls, [])
+
     def test_invalid_configuration_stops_before_source_and_build(self):
         (self.root / ".env").write_text(
             CONFIGURATION.replace("OPENAI_API_KEY=fixture-openai\n", ""),
